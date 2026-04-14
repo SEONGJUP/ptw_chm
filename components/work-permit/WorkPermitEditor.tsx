@@ -1184,104 +1184,6 @@ ${isConfined ? `
   win.onload = () => { win.focus(); win.print(); };
 }
 
-// ── 엑셀 내보내기 ─────────────────────────────────────────────
-async function exportPermitExcel(permit: WorkPermit) {
-  const XLSX = await import("xlsx");
-  const wb = XLSX.utils.book_new();
-
-  // ── 시트 1: 기본정보 ─────────────────────────────────────────
-  const allTypesForExport = [permit.type, ...(permit.extraTypes ?? [])];
-  const basicRows = [
-    { 항목: "허가서 유형",    값: allTypesForExport.map((t) => WORK_PERMIT_TYPE_LABELS[t]).join(" + ") },
-    { 항목: "기타 작업명",    값: permit.customTypeName },
-    { 항목: "상태",           값: WORK_PERMIT_STATUS_LABELS[permit.status] },
-    { 항목: "작업명",         값: permit.title },
-    { 항목: "사업장명",       값: permit.siteName },
-    { 항목: "작업 장소",      값: permit.location },
-    { 항목: "협력사",         값: permit.contractor },
-    { 항목: "투입 인원",      값: permit.personnelCount },
-    { 항목: "작업 시작일시",  값: [permit.startDate, permit.startTime].filter(Boolean).join(" ") },
-    { 항목: "작업 종료일시",  값: [permit.endDate,   permit.endTime  ].filter(Boolean).join(" ") },
-    { 항목: "작업 개요",      값: permit.description },
-    { 항목: "투입 장비",      값: [...(permit.equipmentTypes ?? []).map((k) => CONSTRUCTION_EQUIPMENT_TYPES[k as keyof typeof CONSTRUCTION_EQUIPMENT_TYPES]?.label ?? k), ...(permit.equipmentCustomList ?? [])].join(", ") },
-    { 항목: "신청인 성명",    값: permit.requestedBy },
-    { 항목: "신청인 부서",    값: permit.requestedByDept },
-    { 항목: "신청인 직책",    값: permit.requestedByPosition },
-    { 항목: "연동 작업계획서", 값: permit.workPlanTitle || permit.workPlanId || "" },
-    { 항목: "추가 안전조치",  값: permit.additionalMeasures },
-  ];
-  // 병합 유형별 특화 확인사항
-  const seenSpecKeys = new Set<string>();
-  for (const t of allTypesForExport) {
-    for (const f of PERMIT_SPECIFICS_FIELDS[t] ?? []) {
-      if (!seenSpecKeys.has(f.key)) {
-        seenSpecKeys.add(f.key);
-        basicRows.push({ 항목: `[${WORK_PERMIT_TYPE_LABELS[t]}] ${f.label}`, 값: permit.specifics[f.key] ?? "" });
-      }
-    }
-  }
-  const ws1 = XLSX.utils.json_to_sheet(basicRows);
-  ws1["!cols"] = [{ wch: 22 }, { wch: 52 }];
-  XLSX.utils.book_append_sheet(wb, ws1, "기본정보");
-
-  // ── 시트 2: 안전체크 ─────────────────────────────────────────
-  type CheckRow = { 구분: string; 항목: string; 확인: string };
-  const checkRows: CheckRow[] = [];
-  for (const item of COMMON_SAFETY_MEASURES) {
-    checkRows.push({ 구분: "공통 안전조치", 항목: item, 확인: permit.safetyMeasures?.[item] ? "Y" : "" });
-  }
-  for (const t of allTypesForExport) {
-    for (const item of (PERMIT_SAFETY_CHECKLIST[t] ?? [])) {
-      checkRows.push({ 구분: `${WORK_PERMIT_TYPE_LABELS[t]} 체크리스트`, 항목: item, 확인: permit.safetyChecklist?.[item] || "" });
-    }
-  }
-  for (const item of (permit.customChecklistItems ?? [])) {
-    checkRows.push({ 구분: "기타(직접입력)", 항목: item, 확인: permit.safetyChecklist?.[item] || "" });
-  }
-  const ws2 = XLSX.utils.json_to_sheet(checkRows);
-  ws2["!cols"] = [{ wch: 28 }, { wch: 50 }, { wch: 6 }];
-  XLSX.utils.book_append_sheet(wb, ws2, "안전체크");
-
-  // ── 시트 3: 가스농도측정 (밀폐공간·화기 전용) ───────────────
-  if (allTypesForExport.some((t) => t === "confined_space" || t === "hot_work")) {
-    const gasRows = permit.gasMeasurements.map((gm) => ({
-      가스종류: gm.gasType,
-      측정값:   gm.value,
-      단위:     gm.unit,
-      판정기준: gm.standard,
-      합부:     gm.pass ? "적합" : "미확인",
-      측정자:   gm.measuredBy,
-      확인자:   gm.confirmedBy,
-    }));
-    const ws3 = XLSX.utils.json_to_sheet(gasRows.length ? gasRows : [{ 가스종류: "", 측정값: "", 단위: "", 판정기준: "", 합부: "", 측정자: "", 확인자: "" }]);
-    ws3["!cols"] = [{ wch: 12 }, { wch: 10 }, { wch: 8 }, { wch: 22 }, { wch: 8 }, { wch: 12 }, { wch: 12 }];
-    XLSX.utils.book_append_sheet(wb, ws3, "가스농도측정");
-  }
-
-  // ── 시트 4: 서명결재 ─────────────────────────────────────────
-  const sigRows = PERMIT_SIGNATURE_STAGES.map((stage) => {
-    const sig = permit.signatures.find((s) => s.stage === stage.stage);
-    const statusLabel = sig?.status === "signed" ? "서명완료" : sig?.status === "pending" ? "서명대기" : "미진행";
-    return {
-      단계:     stage.stage,
-      역할:     stage.role,
-      단계명:   stage.label,
-      성명:     sig?.name       ?? "",
-      부서:     sig?.department ?? "",
-      직책:     sig?.position   ?? "",
-      상태:     statusLabel,
-      서명일시: sig?.signedAt ? new Date(sig.signedAt).toLocaleString("ko-KR") : "",
-      검토의견: sig?.comment    ?? "",
-    };
-  });
-  const ws4 = XLSX.utils.json_to_sheet(sigRows);
-  ws4["!cols"] = [{ wch: 5 }, { wch: 12 }, { wch: 14 }, { wch: 12 }, { wch: 16 }, { wch: 12 }, { wch: 10 }, { wch: 22 }, { wch: 40 }];
-  XLSX.utils.book_append_sheet(wb, ws4, "서명결재");
-
-  const typeLabel = WORK_PERMIT_TYPE_LABELS[permit.type];
-  const docTitle  = permit.title || permit.id;
-  XLSX.writeFile(wb, `작업허가서_${typeLabel}_${docTitle}_${new Date().toISOString().slice(0, 10)}.xlsx`);
-}
 
 // ── PermitDetail ──────────────────────────────────────────────
 // ── ApprovalSidePanel ──────────────────────────────────────────
@@ -1438,6 +1340,14 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
   const [reqModal, setReqModal] = useState<string | null>(null);
   const [sigModal, setSigModal] = useState<{ key: string; label: string } | null>(null);
 
+  // 반려 후 처음부터 재결재 초기화
+  const handleRestartApproval = () => {
+    [1, 2, 3, 4].forEach(stage => {
+      updateSignature(permit.id, stage, { status: "pending", signedAt: "" });
+    });
+    updatePermit(permit.id, { status: "draft", approvalDecision: "", approvalConditions: "" });
+  };
+
   const getSpec = (k: string) => (permit.specifics ?? {})[`chm_${k}`] ?? "";
   const setSpec = (k: string, v: string) =>
     updatePermit(permit.id, { specifics: { ...(permit.specifics ?? {}), [`chm_${k}`]: v } });
@@ -1593,6 +1503,16 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
             {permit.approvalDecision === "approved" ? "✅ 최종 승인됨" : permit.approvalDecision === "conditionally_approved" ? "⚠️ 조건부 승인됨" : "❌ 반려됨"}
           </p>
           {permit.approvalConditions && <p className="text-xs text-slate-500 mt-0.5">{permit.approvalConditions}</p>}
+          {/* 반려 시: 처음부터 재결재 버튼 */}
+          {permit.approvalDecision === "rejected" && (
+            <button
+              onClick={handleRestartApproval}
+              className="mt-2 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95"
+              style={{ background: "#dc2626" }}>
+              <span>🔄</span>
+              <span>처음부터 재결재 진행</span>
+            </button>
+          )}
         </div>
       )}
 
@@ -2012,14 +1932,6 @@ function PermitDetail({ permit, onClose, mode = "modal" }: { permit: WorkPermit;
               title="허가서 인쇄"
             >
               🖨️ 인쇄
-            </button>
-            <button
-              onClick={() => exportPermitExcel(permit)}
-              className="text-xs px-3 py-1.5 rounded-xl border font-medium transition-all hover:opacity-80"
-              style={{ borderColor: "#e2e8f0", color: "#475569" }}
-              title="허가서 데이터를 엑셀로 내보내기"
-            >
-              📊 엑셀
             </button>
             {mode === "page" ? (
               <button onClick={onClose} className="text-xs px-3 py-1.5 rounded-xl border border-slate-200 text-slate-500 hover:bg-slate-50 transition-colors">← 목록으로</button>

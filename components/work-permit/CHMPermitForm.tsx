@@ -462,6 +462,164 @@ function OXCheckRow({
   );
 }
 
+// ════════════════════════════════════════════════════
+// 특별작업 입력방식 토글 + PDF 업로드 블록
+// ════════════════════════════════════════════════════
+function SubFormModeToggle({
+  modeKey, label, icon, color, get, set,
+}: {
+  modeKey: string; label: string; icon: string; color: string;
+  get: (k: string) => string; set: (k: string, v: string) => void;
+}) {
+  const mode = get(modeKey) || "form";
+  return (
+    <div className="flex items-center justify-between px-1 mb-2">
+      <div className="flex items-center gap-2">
+        <span className="text-base">{icon}</span>
+        <span className="text-sm font-bold" style={{ color }}>{label} — 입력방식 선택</span>
+      </div>
+      <div className="flex rounded-lg border border-slate-200 overflow-hidden">
+        {[
+          { key: "form", label: "📝 상세입력" },
+          { key: "upload", label: "📎 문서첨부" },
+        ].map((m, idx) => (
+          <button key={m.key} onClick={() => set(modeKey, m.key)}
+            className={`px-3 py-1.5 text-xs font-semibold transition-all${idx > 0 ? " border-l border-slate-200" : ""}`}
+            style={{ background: mode === m.key ? color : "white", color: mode === m.key ? "white" : "#94a3b8" }}>
+            {m.label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PdfUploadBlock({
+  label, icon, color, bg, storeKey, get, set,
+}: {
+  label: string; icon: string; color: string; bg: string; storeKey: string;
+  get: (k: string) => string; set: (k: string, v: string) => void;
+}) {
+  const fileName = get(storeKey + "_fileName");
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    set(storeKey + "_fileName", file.name);
+  };
+  return (
+    <div className="rounded-2xl overflow-hidden border shadow-sm" style={{ borderColor: color + "40" }}>
+      <div className="flex items-center gap-2.5 px-5 py-3" style={{ background: bg }}>
+        <span className="text-base">{icon}</span>
+        <span className="text-sm font-bold" style={{ color }}>{label} — 문서 첨부</span>
+      </div>
+      <div className="p-5 bg-white">
+        {fileName ? (
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border-2 border-dashed"
+            style={{ borderColor: color + "60", background: bg }}>
+            <div className="flex items-center gap-2">
+              <span className="text-lg">📄</span>
+              <div>
+                <p className="text-sm font-semibold" style={{ color }}>첨부 완료</p>
+                <p className="text-xs text-slate-500 mt-0.5 break-all">{fileName}</p>
+              </div>
+            </div>
+            <button onClick={() => set(storeKey + "_fileName", "")}
+              className="text-xs font-semibold text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded-lg hover:bg-red-50">
+              삭제
+            </button>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center gap-3 px-6 py-8 rounded-xl border-2 border-dashed cursor-pointer transition-all hover:border-opacity-80"
+            style={{ borderColor: color + "50", background: bg + "60" }}>
+            <span className="text-3xl">📎</span>
+            <div className="text-center">
+              <p className="text-sm font-semibold" style={{ color }}>PDF 파일을 업로드하세요</p>
+              <p className="text-xs text-slate-400 mt-1">클릭하여 파일 선택 또는 드래그 앤 드롭</p>
+            </div>
+            <span className="text-xs font-semibold px-3 py-1.5 rounded-lg text-white" style={{ background: color }}>
+              파일 선택
+            </span>
+            <input type="file" accept=".pdf" className="hidden" onChange={handleFile} />
+          </label>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════
+// 세이프버디 안전교육 불러오기 모달
+// ════════════════════════════════════════════════════
+const MOCK_SAFEBUDDY_EDU = [
+  { id: "edu1", title: "화재예방 및 초기대응 교육", date: "2025-12-10", trainer: "김안전", org: "안전관리팀", content: "화재 발생 시 행동요령, 소화기 사용법, 피난경로 교육" },
+  { id: "edu2", title: "밀폐공간 작업 안전교육", date: "2025-11-25", trainer: "이관리", org: "시설관리팀", content: "밀폐공간 산소농도 측정, 유해가스 대응, 구조장비 사용법 교육" },
+  { id: "edu3", title: "고소작업 안전교육", date: "2025-11-18", trainer: "박감독", org: "공사감독팀", content: "고소작업 안전대 착용법, 추락 방지 조치, 비계 점검 사항 교육" },
+  { id: "edu4", title: "화기작업 안전교육", date: "2025-10-30", trainer: "최대리", org: "발주처 안전팀", content: "용접·용단 화기작업 안전수칙, 불꽃 비산방지, 소화기 배치 교육" },
+  { id: "edu5", title: "작업허가서 작성 교육", date: "2025-10-15", trainer: "정소장", org: "현장관리팀", content: "작업허가서 작성 절차, 서명 결재 프로세스, 안전조치 확인사항 교육" },
+];
+
+type EduRow = { org: string; name: string; job: string; signature: string };
+
+function SafeBuddyEduModal({
+  onImport,
+  onClose,
+}: {
+  onImport: (edu: { title: string; content: string; trainerOrg: string; trainerName: string }) => void;
+  onClose: () => void;
+}) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const sel = MOCK_SAFEBUDDY_EDU.find(e => e.id === selected);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.5)" }}>
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ width: 520, maxHeight: "80vh" }}>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">🛡️</span>
+            <span className="text-sm font-bold text-slate-800">세이프버디 — 안전교육 불러오기</span>
+          </div>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600">✕</button>
+        </div>
+        <p className="px-5 pt-3 pb-1 text-xs text-slate-400 flex-shrink-0">세이프버디에 등록된 안전교육 내역에서 선택하세요</p>
+        <div className="flex-1 overflow-y-auto p-4 space-y-2">
+          {MOCK_SAFEBUDDY_EDU.map(edu => (
+            <button key={edu.id} onClick={() => setSelected(edu.id === selected ? null : edu.id)}
+              className="w-full text-left px-4 py-3 rounded-xl border-2 transition-all"
+              style={{
+                borderColor: selected === edu.id ? TEAL : "#f1f5f9",
+                background: selected === edu.id ? `${TEAL}08` : "#f8fafc",
+              }}>
+              <div className="flex items-start justify-between gap-2">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-bold text-slate-800">{edu.title}</p>
+                  <p className="text-xs text-slate-400 mt-0.5">{edu.date} · {edu.trainer} ({edu.org})</p>
+                  <p className="text-xs text-slate-500 mt-1 leading-relaxed line-clamp-2">{edu.content}</p>
+                </div>
+                {selected === edu.id && (
+                  <span className="w-5 h-5 rounded-full flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0 mt-0.5"
+                    style={{ background: TEAL }}>✓</span>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100 flex gap-2 flex-shrink-0">
+          <button onClick={onClose}
+            className="flex-1 py-2.5 rounded-xl border text-sm font-semibold text-slate-500 hover:bg-slate-50 transition-colors">
+            취소
+          </button>
+          <button
+            disabled={!sel}
+            onClick={() => { if (sel) { onImport({ title: sel.title, content: sel.content, trainerOrg: sel.org, trainerName: sel.trainer }); onClose(); } }}
+            className="flex-1 py-2.5 rounded-xl text-sm font-semibold text-white transition-all"
+            style={{ background: sel ? TEAL : "#cbd5e1", cursor: sel ? "pointer" : "not-allowed" }}>
+            이 교육 불러오기
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function AddBtn({ onClick, label = "+ 행 추가" }: { onClick: () => void; label?: string }) {
   return (
     <button onClick={onClick}
@@ -1444,13 +1602,14 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const togglePPE = (item: string) => set("ppeChecked", JSON.stringify({ ...ppeChecked, [item]: !ppeChecked[item] }));
 
   // 교육 수강자 명단
-  type EduRow = { org: string; name: string; job: string; signature: string };
   const eduRows: EduRow[] = (() => { try { return JSON.parse(get("eduRows")) || []; } catch { return []; } })();
   const setEdu = (rows: EduRow[]) => set("eduRows", JSON.stringify(rows));
 
   // 서명 모달 상태
   const [sigModal, setSigModal] = useState<{ target: string; label: string } | null>(null);
   const [reqModal, setReqModal] = useState<string | null>(null); // label for request modal
+  // 세이프버디 교육 모달
+  const [safeBuddyModal, setSafeBuddyModal] = useState(false);
 
   const WORK_TYPES = [
     { key: "hotWork",       label: "발화(화기)", icon: "🔥", color: "#dc2626", bg: "#fff1f2" },
@@ -1464,9 +1623,17 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const endDay   = getDayKo(permit.endDate);
   const checklistDone = SAFETY_CHECKLIST.filter(c => !!chmChecklist[c.key]).length;
   const CARD = "bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm";
+  const isCompleted = get("formCompleted") === "true";
 
   return (
     <div className="space-y-4">
+
+      {/* ══════ 비활성화 래퍼: 작성완료 후 편집 불가 ══════ */}
+      <div
+        className={isCompleted ? "pointer-events-none select-none" : ""}
+        style={isCompleted ? { opacity: 0.6 } : undefined}
+      >
+      <div className="space-y-4">
 
       {/* ══════ 섹션 1: 작업 개요 ══════ */}
       <div className={CARD}>
@@ -1535,11 +1702,10 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
             </div>
             <div className="p-4 space-y-4">
 
-              {/* 세그먼트 탭 형식 선택 */}
+              {/* 세그먼트 탭 형식 선택 (2개 탭) */}
               <div className="flex rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-1 gap-1">
                 {[
                   { key: "general", label: "일반작업", icon: "🔧", color: "#059669", bg: "#059669" },
-                  { key: "safety",  label: "안전작업", icon: "🛡",  color: "#0369a1", bg: "#0369a1" },
                   { key: "special", label: "특별작업", icon: "⭐", color: "#7c3aed", bg: "#7c3aed" },
                 ].map(({ key, label, icon, color, bg }) => {
                   const on = workCategory === key;
@@ -1556,15 +1722,6 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
                 })}
               </div>
 
-              {/* 특별작업: 내용 입력 */}
-              {workCategory === "special" && (
-                <div className="rounded-lg border border-violet-100 bg-violet-50/60 px-4 py-3">
-                  <label className={LBL} style={{ color: "#7c3aed" }}>특별작업 내용</label>
-                  <input className={INP} value={get("specialWork")} onChange={e => set("specialWork", e.target.value)}
-                    placeholder="특별안전작업 내용 직접 입력" />
-                </div>
-              )}
-
               {/* 일반작업: 별도 입력 없음 — 선택 완료 표시 */}
               {workCategory === "general" && (
                 <div className="flex items-center gap-2 px-4 py-2.5 rounded-lg bg-emerald-50 border border-emerald-100 text-emerald-700 text-sm font-semibold">
@@ -1573,8 +1730,8 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
                 </div>
               )}
 
-              {/* 안전작업: 카드형 서브타입 선택 */}
-              {workCategory === "safety" && (
+              {/* 특별작업: 안전작업 유형 선택 (복수 선택) */}
+              {workCategory === "special" && (
                 <div>
                   <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">안전작업 유형 선택 (복수 선택 가능)</p>
                   <div className="grid grid-cols-5 gap-2">
@@ -1602,10 +1759,31 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
         </div>
       </div>
 
-      {/* ══════ 안전작업 서브폼 (조건부 확장) ══════ */}
-      {workCategory === "safety" && safetyWorks.hotWork && <HotWorkSubForm get={get} set={set} />}
-      {workCategory === "safety" && safetyWorks.heightWork && <HeightWorkSubForm get={get} set={set} />}
-      {workCategory === "safety" && safetyWorks.confinedSpace && <ConfinedSpaceSubForm get={get} set={set} />}
+      {/* ══════ 특별작업 서브폼 (입력방식 토글 포함) ══════ */}
+      {workCategory === "special" && safetyWorks.hotWork && (
+        <div className="space-y-2">
+          <SubFormModeToggle modeKey="hotWork_mode" label="화기작업" icon="🔥" color="#dc2626" get={get} set={set} />
+          {(get("hotWork_mode") || "form") === "form"
+            ? <HotWorkSubForm get={get} set={set} />
+            : <PdfUploadBlock label="화기작업" icon="🔥" color="#dc2626" bg="#fef2f2" storeKey="hotWork" get={get} set={set} />}
+        </div>
+      )}
+      {workCategory === "special" && safetyWorks.confinedSpace && (
+        <div className="space-y-2">
+          <SubFormModeToggle modeKey="confinedSpace_mode" label="밀폐공간" icon="🚪" color="#1d4ed8" get={get} set={set} />
+          {(get("confinedSpace_mode") || "form") === "form"
+            ? <ConfinedSpaceSubForm get={get} set={set} />
+            : <PdfUploadBlock label="밀폐공간" icon="🚪" color="#1d4ed8" bg="#eff6ff" storeKey="confinedSpace" get={get} set={set} />}
+        </div>
+      )}
+      {workCategory === "special" && safetyWorks.heightWork && (
+        <div className="space-y-2">
+          <SubFormModeToggle modeKey="heightWork_mode" label="고소작업" icon="🏗️" color="#d97706" get={get} set={set} />
+          {(get("heightWork_mode") || "form") === "form"
+            ? <HeightWorkSubForm get={get} set={set} />
+            : <PdfUploadBlock label="고소작업" icon="🏗️" color="#d97706" bg="#fffbeb" storeKey="heightWork" get={get} set={set} />}
+        </div>
+      )}
 
       {/* ══════ 섹션 2: 작업허가 승인 전 안전조치 확인 ══════ */}
       <div className={CARD}>
@@ -1697,6 +1875,25 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       <div className={CARD}>
         <SectionHeader num={3} title="작업자 안전교육 현황" />
         <div className="p-6 space-y-4">
+
+          {/* 세이프버디 불러오기 버튼 */}
+          <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-indigo-100 bg-indigo-50/60">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🛡️</span>
+              <div>
+                <p className="text-xs font-bold text-indigo-700">세이프버디 연동</p>
+                <p className="text-[10px] text-indigo-400 mt-0.5">기존 안전교육 내역을 불러와 자동 입력합니다</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setSafeBuddyModal(true)}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-xs font-bold text-white transition-all hover:opacity-90 active:scale-95"
+              style={{ background: "#4f46e5" }}>
+              <span>📋</span>
+              <span>안전교육 불러오기</span>
+            </button>
+          </div>
+
           <PersonTable
             header="교육 참여 작업자 명단"
             rows={eduRows as Record<string, string>[]}
@@ -1723,6 +1920,9 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
           </div>
         </div>
       </div>
+
+      </div>{/* /비활성화 래퍼 inner space-y-4 */}
+      </div>{/* /비활성화 래퍼 outer */}
 
       {/* ══════ 작성완료 버튼 ══════ */}
       {get("formCompleted") !== "true" ? (
@@ -1799,6 +1999,16 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
         <SignatureRequestModal
           targetLabel={reqModal}
           onClose={() => setReqModal(null)}
+        />
+      )}
+      {safeBuddyModal && (
+        <SafeBuddyEduModal
+          onImport={({ title, content, trainerOrg, trainerName }) => {
+            set("eduContent", content);
+            set("eduTrainer_org", trainerOrg);
+            set("eduTrainer_name", trainerName);
+          }}
+          onClose={() => setSafeBuddyModal(false)}
         />
       )}
     </div>
