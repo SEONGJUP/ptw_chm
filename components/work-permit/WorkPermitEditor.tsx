@@ -658,28 +658,33 @@ function printPermitForm(permit: WorkPermit) {
     ]},
   ];
 
-  // ── 작업종류 표시
-  const workTypeLabel = () => {
-    if (workCat === "general") return "일반작업 ✓";
-    if (workCat === "safety") {
-      const types = [];
-      if (sw.hotWork) types.push("발화(화기)");
-      if (sw.confinedSpace) types.push("밀폐");
-      if (sw.heightWork) types.push("고소");
-      if (sw.crane) types.push("크레인");
-      if (sw.electrical) types.push("전기");
-      return `안전작업: ${types.join(", ") || "—"}`;
-    }
-    return "특별작업";
-  };
-
-  const workTypeCells = () => {
-    const safety = ["hotWork:발화(화기)", "confinedSpace:밀폐", "heightWork:고소", "crane:크레인", "electrical:전기"];
-    return safety.map(s => {
+  const safetySubTypes = ["hotWork:발화(화기)", "confinedSpace:밀폐", "heightWork:고소", "crane:크레인", "electrical:전기"];
+  const workTypeSectionHtml = () => {
+    const chk = (active: boolean) => `<span style="font-size:12pt;">${active ? "☑" : "☐"}</span>`;
+    const subLine = safetySubTypes.map(s => {
       const [key, label] = s.split(":");
-      const checked = workCat === "safety" && !!sw[key];
-      return `<td style="text-align:center;border:1px solid #000;padding:2px;font-size:8pt;">${checked ? "☑" : "☐"} ${label}</td>`;
-    }).join("");
+      return `${workCat === "safety" && !!sw[key] ? "☑" : "☐"} ${label}`;
+    }).join("&ensp;");
+    return `
+      <table style="width:100%;border-collapse:collapse;">
+        <tr>
+          <td style="border:1px solid #aaa;text-align:center;padding:5px 4px;width:20%;">
+            <div style="font-weight:bold;font-size:8.5pt;margin-bottom:3px;">특별작업</div>
+            ${chk(workCat === "special")}
+          </td>
+          <td style="border:1px solid #aaa;padding:5px 8px;width:60%;">
+            <div style="display:flex;align-items:center;gap:6px;">
+              <span style="font-weight:bold;font-size:8.5pt;">안전작업</span>
+              ${chk(workCat === "safety")}
+            </div>
+            <div style="font-size:8pt;margin-top:4px;color:#333;">${subLine}</div>
+          </td>
+          <td style="border:1px solid #aaa;text-align:center;padding:5px 4px;width:20%;">
+            <div style="font-weight:bold;font-size:8.5pt;margin-bottom:3px;">일반작업</div>
+            ${chk(workCat === "general")}
+          </td>
+        </tr>
+      </table>`;
   };
 
   const checklistRows = (items: (string | { confined: string })[], oxData: Record<string, string>) => {
@@ -757,18 +762,7 @@ function printPermitForm(permit: WorkPermit) {
   </tr>
   <tr>
     <td class="th-label">작업 종류</td>
-    <td colspan="3">
-      <table style="border:none;width:100%;">
-        <tr>
-          <td style="border:none;font-size:8pt;width:80px;font-weight:bold;">특별안전작업</td>
-          <td style="border:none;width:16px;font-size:8pt;">${workCat === "special" ? "☑" : "☐"}</td>
-          <td style="border:none;font-size:8pt;font-weight:bold;width:50px;">안전작업</td>
-          ${workTypeCells()}
-          <td style="border:none;font-size:8pt;font-weight:bold;width:50px;">일반작업</td>
-          <td style="border:none;font-size:8pt;">${workCat === "general" ? "☑" : "☐"}</td>
-        </tr>
-      </table>
-    </td>
+    <td colspan="3" style="padding:4px;">${workTypeSectionHtml()}</td>
   </tr>
   <tr>
     <td class="th-label" rowspan="2">발주처 / 시공사</td>
