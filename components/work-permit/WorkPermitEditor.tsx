@@ -1335,6 +1335,61 @@ function PanelSigModal({ label, onSave, onClose }: { label: string; onSave: (v: 
   );
 }
 
+// ── ApprovalSigRow: 모듈 레벨로 정의 (컴포넌트 내부 정의 시 한글 IME 버그 발생) ──
+const TINP_APPROVAL = "w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 transition-all placeholder:text-slate-300";
+
+function ApprovalSigRow({
+  specKey, label, note,
+  getSpec, setSpec,
+  onSigClick, onReqClick,
+  primary,
+}: {
+  specKey: string; label: string; note?: string;
+  getSpec: (k: string) => string;
+  setSpec: (k: string, v: string) => void;
+  onSigClick: (key: string, label: string) => void;
+  onReqClick: (label: string) => void;
+  primary: string;
+}) {
+  const done = !!getSpec(specKey + "_sigImg");
+  return (
+    <div className="rounded-lg border overflow-hidden" style={{ borderColor: done ? "#d1fae5" : "#f1f5f9" }}>
+      <div className="px-3 py-1.5 flex items-center gap-2" style={{ background: done ? "#f0fdf4" : "#f8fafc" }}>
+        <div className="flex-1 min-w-0">
+          <span className="text-xs font-semibold text-slate-700">{label}</span>
+          {note && <span className="text-[10px] text-slate-400 ml-1">({note})</span>}
+        </div>
+        <div className="flex items-center gap-1">
+          {done
+            ? <span className="text-[10px] font-bold text-emerald-500 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100">✓ 서명완료</span>
+            : <>
+                <button onClick={() => onSigClick(specKey + "_sigImg", label)}
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
+                  style={{ color: "#7c3aed", borderColor: "#7c3aed40", background: "#7c3aed0d" }}>✍️</button>
+                <button onClick={() => onReqClick(label)}
+                  className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
+                  style={{ color: primary, borderColor: `${primary}40`, background: `${primary}0d` }}>📨</button>
+              </>
+          }
+        </div>
+      </div>
+      {!done && (
+        <div className="px-2.5 pb-2 pt-1 grid grid-cols-3 gap-1 bg-white border-t border-slate-50">
+          <input className={TINP_APPROVAL} placeholder="소속" value={getSpec(specKey + "_org")} onChange={e => setSpec(specKey + "_org", e.target.value)} />
+          <input className={TINP_APPROVAL} placeholder="성명" value={getSpec(specKey + "_name")} onChange={e => setSpec(specKey + "_name", e.target.value)} />
+          <input className={TINP_APPROVAL} placeholder="연락처" value={getSpec(specKey + "_tel")} onChange={e => setSpec(specKey + "_tel", e.target.value)} />
+        </div>
+      )}
+      {done && (
+        <div className="px-3 py-1 bg-white border-t border-slate-50">
+          <span className="text-[10px] text-slate-500">{getSpec(specKey + "_name") || "—"}</span>
+          {getSpec(specKey + "_org") && <span className="text-[10px] text-slate-400"> · {getSpec(specKey + "_org")}</span>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
   const { updatePermit, updateSignature } = useWorkPermitStore();
   const [reqModal, setReqModal] = useState<string | null>(null);
@@ -1388,48 +1443,17 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
     if (stage === 4) updatePermit(permit.id, { status: "completed" });
   };
 
-  const tinp = "w-full px-2 py-1.5 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 transition-all placeholder:text-slate-300";
-
-  // ── 서명자 행 컴포넌트 ─────────────────────────────────────────
-  const SigRow = ({ specKey, label, note }: { specKey: string; label: string; note?: string }) => {
-    const done = sigDone(specKey);
-    return (
-      <div className="rounded-lg border overflow-hidden" style={{ borderColor: done ? "#d1fae5" : "#f1f5f9" }}>
-        <div className="px-3 py-1.5 flex items-center gap-2" style={{ background: done ? "#f0fdf4" : "#f8fafc" }}>
-          <div className="flex-1 min-w-0">
-            <span className="text-xs font-semibold text-slate-700">{label}</span>
-            {note && <span className="text-[10px] text-slate-400 ml-1">({note})</span>}
-          </div>
-          <div className="flex items-center gap-1">
-            {done
-              ? <span className="text-[10px] font-bold text-emerald-500 px-1.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-100">✓ 서명완료</span>
-              : <>
-                  <button onClick={() => setSigModal({ key: specKey + "_sigImg", label })}
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
-                    style={{ color: "#7c3aed", borderColor: "#7c3aed40", background: "#7c3aed0d" }}>✍️</button>
-                  <button onClick={() => setReqModal(label)}
-                    className="text-[10px] font-semibold px-1.5 py-0.5 rounded border"
-                    style={{ color: PRIMARY, borderColor: `${PRIMARY}40`, background: `${PRIMARY}0d` }}>📨</button>
-                </>
-            }
-          </div>
-        </div>
-        {!done && (
-          <div className="px-2.5 pb-2 pt-1 grid grid-cols-3 gap-1 bg-white border-t border-slate-50">
-            <input className={tinp} placeholder="소속" value={getSpec(specKey + "_org")} onChange={e => setSpec(specKey + "_org", e.target.value)} />
-            <input className={tinp} placeholder="성명" value={getSpec(specKey + "_name")} onChange={e => setSpec(specKey + "_name", e.target.value)} />
-            <input className={tinp} placeholder="연락처" value={getSpec(specKey + "_tel")} onChange={e => setSpec(specKey + "_tel", e.target.value)} />
-          </div>
-        )}
-        {done && (
-          <div className="px-3 py-1 bg-white border-t border-slate-50">
-            <span className="text-[10px] text-slate-500">{getSpec(specKey + "_name") || "—"}</span>
-            {getSpec(specKey + "_org") && <span className="text-[10px] text-slate-400"> · {getSpec(specKey + "_org")}</span>}
-          </div>
-        )}
-      </div>
-    );
-  };
+  // ── 서명자 행 렌더 헬퍼 (컴포넌트가 아닌 함수 호출로 사용 — 한글 IME 버그 방지)
+  const SigRow = (specKey: string, label: string, note?: string) => (
+    <ApprovalSigRow
+      key={specKey}
+      specKey={specKey} label={label} note={note}
+      getSpec={getSpec} setSpec={setSpec}
+      onSigClick={(k, l) => setSigModal({ key: k, label: l })}
+      onReqClick={(l) => setReqModal(l)}
+      primary={PRIMARY}
+    />
+  );
 
   // ── 서브단계 블록 ────────────────────────────────────────────────
   const SubBlock = ({ icon, label, color, bg, children }: {
@@ -1539,44 +1563,44 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
               )}
               {(isActive || done) && (
                 <div className="px-3 pb-3 pt-1 bg-white border-t border-slate-50 space-y-1.5">
-                  <SigRow specKey="ap1_client" label="입주사 관리자" />
-                  <SigRow specKey="ap1_contractor" label="시공사 안전관리자(작업감독자)" />
+                  {SigRow("ap1_client", "입주사 관리자")}
+                  {SigRow("ap1_contractor", "시공사 안전관리자(작업감독자)")}
 
                   {/* 1-1. 화기작업 서브단계 */}
                   {isHotWork && (
                     <SubBlock icon="🔥" label="1-1. 화기작업 서명" color="#b91c1c" bg="#fef2f2">
-                      <SigRow specKey="ap11_watch" label="화재감시자" />
-                      <SigRow specKey="ap11_fire" label="소방안전관리자" />
-                      <SigRow specKey="ap11_facility" label="시설팀 담당자" />
-                      <SigRow specKey="ap11_construction" label="공사담당자" />
-                      <SigRow specKey="ap11_tenant" label="입주사 관리 담당자" />
-                      <SigRow specKey="ap11_area" label="작업구역 담당자" />
-                      <SigRow specKey="ap11_chief" label="화기취급 책임자" />
+                      {SigRow("ap11_watch", "화재감시자")}
+                      {SigRow("ap11_fire", "소방안전관리자")}
+                      {SigRow("ap11_facility", "시설팀 담당자")}
+                      {SigRow("ap11_construction", "공사담당자")}
+                      {SigRow("ap11_tenant", "입주사 관리 담당자")}
+                      {SigRow("ap11_area", "작업구역 담당자")}
+                      {SigRow("ap11_chief", "화기취급 책임자")}
                       <div className="border-t border-red-100 my-1" />
                       <p className="text-[10px] font-bold text-red-700 px-1">초기대응체계</p>
-                      <SigRow specKey="hw_er_chief" label="현장책임자" />
-                      <SigRow specKey="hw_er_contact" label="비상연락" />
-                      <SigRow specKey="hw_er_fire" label="초기소화" />
-                      <SigRow specKey="hw_er_evac" label="피난유도" />
+                      {SigRow("hw_er_chief", "현장책임자")}
+                      {SigRow("hw_er_contact", "비상연락")}
+                      {SigRow("hw_er_fire", "초기소화")}
+                      {SigRow("hw_er_evac", "피난유도")}
                     </SubBlock>
                   )}
 
                   {/* 1-2. 밀폐공간 서브단계 */}
                   {isConfinedSpace && (
                     <SubBlock icon="🚪" label="1-2. 밀폐공간 작업 서명" color="#1d4ed8" bg="#eff6ff">
-                      <SigRow specKey="ap12_safety" label="안전관리자" />
-                      <SigRow specKey="ap12_chief" label="밀폐공간 작업 책임자" />
-                      <SigRow specKey="ap12_watcher" label="밀폐공간 감시자" />
-                      <SigRow specKey="ap12_worker" label="밀폐공간 작업자" />
+                      {SigRow("ap12_safety", "안전관리자")}
+                      {SigRow("ap12_chief", "밀폐공간 작업 책임자")}
+                      {SigRow("ap12_watcher", "밀폐공간 감시자")}
+                      {SigRow("ap12_worker", "밀폐공간 작업자")}
                     </SubBlock>
                   )}
 
                   {/* 1-3. 고소작업 서브단계 */}
                   {isHeightWork && (
                     <SubBlock icon="🏗️" label="1-3. 고소작업 서명" color="#b45309" bg="#fffbeb">
-                      <SigRow specKey="ap13_chief" label="고소작업 책임자" note="운전자격증 확인" />
-                      <SigRow specKey="ap13_watcher" label="고소작업 감시자" note="안전대 착용 확인" />
-                      <SigRow specKey="ap13_foreman" label="작업반장" note="TBM 실시 확인" />
+                      {SigRow("ap13_chief", "고소작업 책임자", "운전자격증 확인")}
+                      {SigRow("ap13_watcher", "고소작업 감시자", "안전대 착용 확인")}
+                      {SigRow("ap13_foreman", "작업반장", "TBM 실시 확인")}
                     </SubBlock>
                   )}
 
@@ -1607,8 +1631,8 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
                 color={c} done={done} isActive={isActive} signedAt={sig.signedAt} />
               {(isActive || done) && (
                 <div className="px-3 pb-3 pt-1 bg-white border-t border-slate-50 space-y-1.5">
-                  <SigRow specKey="ap2_safety" label="안전담당자" />
-                  <SigRow specKey="ap2_she" label="SHE관리원" />
+                  {SigRow("ap2_safety", "안전담당자")}
+                  {SigRow("ap2_she", "SHE관리원")}
                   {isActive && !done && (
                     <button onClick={() => advanceStage(2)} disabled={!stage2Ok}
                       className="w-full py-2.5 rounded-xl text-xs font-bold text-white mt-2 transition-all"
@@ -1636,7 +1660,7 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
                 color={c} done={done} isActive={isActive} signedAt={sig.signedAt} />
               {(isActive || done) && (
                 <div className="px-3 pb-3 pt-1 bg-white border-t border-slate-50 space-y-1.5">
-                  <SigRow specKey="ap3_manager" label="관리소장" />
+                  {SigRow("ap3_manager", "관리소장")}
 
                   {/* 결재 결과 */}
                   <div className="rounded-lg border border-amber-200 bg-amber-50 p-2.5">
@@ -1675,8 +1699,8 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
                   </div>
                   {hasExtension && (
                     <SubBlock icon="🔁" label="3-1. 작업허가 연장 서명" color="#7c3aed" bg="#f5f3ff">
-                      <SigRow specKey="ap31_manager" label="관리소장(연장)" />
-                      <SigRow specKey="ap31_safety" label="안전담당자(연장)" />
+                      {SigRow("ap31_manager", "관리소장(연장)")}
+                      {SigRow("ap31_safety", "안전담당자(연장)")}
                     </SubBlock>
                   )}
 
@@ -1707,8 +1731,8 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
                 color={c} done={done} isActive={isActive} signedAt={sig.signedAt} />
               {(isActive || done) && (
                 <div className="px-3 pb-3 pt-1 bg-white border-t border-slate-50 space-y-1.5">
-                  <SigRow specKey="ap4_site" label="현장소장(시공사)" />
-                  <SigRow specKey="ap4_supervisor" label="작업감독자" />
+                  {SigRow("ap4_site", "현장소장(시공사)")}
+                  {SigRow("ap4_supervisor", "작업감독자")}
 
                   {/* 작업완료 확인 메모 */}
                   <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-2.5">
