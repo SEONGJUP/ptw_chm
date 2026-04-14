@@ -545,6 +545,651 @@ function SectionHeader({ icon, title, badge }: { icon: string; title: string; ba
   );
 }
 
+// ── 작업허가서 인쇄 ───────────────────────────────────────────
+function printPermitForm(permit: WorkPermit) {
+  const sp = permit.specifics ?? {};
+  const g = (k: string) => sp[`chm_${k}`] ?? "";
+  const sw: Record<string, boolean> = (() => { try { return JSON.parse(g("safetyWorks")) || {}; } catch { return {}; } })();
+  const appOX: Record<string, string> = (() => { try { return JSON.parse(g("hw_appOX")) || {}; } catch { return {}; } })();
+  const permitOX: Record<string, string> = (() => { try { return JSON.parse(g("hw_permitOX")) || {}; } catch { return {}; } })();
+  const eduRows: { org: string; name: string; job: string; signature: string }[] =
+    (() => { try { return JSON.parse(g("eduRows")) || []; } catch { return []; } })();
+  const workerRows: { name: string; org: string }[] =
+    (() => { try { return JSON.parse(g("hw_workerRows")) || []; } catch { return []; } })();
+  const hwWorkTypes: string[] = (() => { try { return JSON.parse(g("hw_workTypes")) || []; } catch { return []; } })();
+
+  const isHot      = !!sw.hotWork;
+  const isConfined = !!sw.confinedSpace;
+  const isHeight   = !!sw.heightWork;
+  const hasExt     = g("hasExtension") === "true";
+  const workCat    = g("workCategory");
+
+  const dayMap: Record<string, string> = { "0": "일", "1": "월", "2": "화", "3": "수", "4": "목", "5": "금", "6": "토" };
+  const fmtDate = (d: string) => {
+    if (!d) return "____년 __월 __일";
+    const dt = new Date(d);
+    const day = dayMap[String(dt.getDay())];
+    return `${dt.getFullYear()}년 ${dt.getMonth() + 1}월 ${dt.getDate()}일 (${day})`;
+  };
+
+  const sigImg = (key: string) =>
+    g(key) ? `<img src="${g(key)}" style="height:28px;max-width:80px;object-fit:contain;" />` : "";
+
+  const personCell = (nameKey: string, orgKey: string, sigKey: string) => `
+    <td style="text-align:center;padding:2px 4px;font-size:8pt;">
+      ${g(orgKey) ? `<div style="font-size:7pt;color:#555">${g(orgKey)}</div>` : ""}
+      <div>${g(nameKey) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</div>
+      <div>${sigImg(sigKey)}</div>
+    </td>`;
+
+  // ── OX 체크 결과 표시
+  const ox = (val: string) => val === "O" ? "○" : val === "X" ? "×" : "";
+
+  // ── 안전조치 체크리스트
+  const SAFETY_ITEMS = [
+    { key: "privacy",   label: "비밀/보안준수",  detail: "비밀/보안준수 서약서는 승인을 득하였는가?" },
+    { key: "ppe",       label: "안전보호구",     detail: "□안전모 □안전화 □안전벨트 □방진마스크 □보안경 □기타(  )" },
+    { key: "signs",     label: "경고표지판",     detail: "작업안내표지판, 작업 위험표지판(전기/고소)은 설치하였는가?" },
+    { key: "fireExt",   label: "소화기비치",     detail: "작업장에 적정 소화기를 배치하였는가?" },
+    { key: "hotWork2",  label: "화기작업",       detail: "용접작업 시 불꽃방지망/방염포 등을 설치하였는가?" },
+    { key: "hazard",    label: "유해/위험요인",  detail: "작업에 따른 유해/위험요인에 대한 내용을 전달받았는가?" },
+    { key: "material",  label: "자재 양중",      detail: "자재 양중 장소, 이동경로 및 일정협의는 완료되었는가?" },
+    { key: "extend",    label: "작업기간 연장",  detail: "작업기간 및 시간 연장 시 이에 대한 확인을 하고 명시하였는가?" },
+    { key: "safetyEdu", label: "안전작업",       detail: "작업자 안전작업 관련 특별교육 이수 여부" },
+  ];
+
+  const HOT_APP = [
+    "작업구역 설정 및 출입제한 조치 여부",
+    "작업에 맞는 보호구 착용 여부",
+    "작업구역 내 가스농도 측정 및 잔류물질 확인 여부",
+    "작업구역 11m 內 인화성 및 가연성 물질 제거상태",
+    "인화성 물질 취급 작업과 동시작업 유무",
+    "불티 비산방지조치(불티차단막/방화포 등) 실시 여부",
+    "작업지점 5m 이내 소화기 비치 여부",
+    "교육 실시 여부(소방시설 사용법, 피난로 위치, 초기대응체계 등)",
+    { confined: "밀폐공간 관계자 외 출입제한 여부" },
+    { confined: "밀폐공간 작업에 필요한 보호구 착용 여부" },
+    { confined: "밀폐공간의 환기 설비 설치 여부" },
+    { confined: "작업자의 개인통신장비 및 휴대용 산소농도측정기 착용 여부" },
+    { confined: "구조장비(구급함/구명줄/삼각대 등) 준비 여부" },
+    { confined: "가스 및 산소농도 측정 여부" },
+    { confined: "전화하면 5분이내 구조할 수 있는 위치에 구조팀 대기" },
+    { confined: `필요한 구조팀 담당자 성명: ${g("hw_er_contact_name") || "___"}` },
+  ] as (string | { confined: string })[];
+
+  const HOT_PERMIT = [
+    "화기작업 허가서 발급 및 비치 여부",
+    "화재감시자 배치 여부",
+    "작업구역 설정 및 출입제한 조치 여부",
+    "작업에 맞는 보호구 착용 여부",
+    "작업구역 내 가스농도 측정 및 잔류물질 확인 여부",
+    "작업구역 11m 內 인화성 및 가연성 물질 제거상태",
+    "인화성 물질 취급 작업과 동시작업 유무",
+    "불티 비산방지조치(불티차단막/방화포 등) 실시 여부",
+    "작업지점 5m 이내 소화기 비치 여부",
+    "교육 실시 여부(소방시설 사용법, 피난로 위치, 초기대응체계 등)",
+    { confined: "밀폐공간 관계자 외 출입제한 여부" },
+    { confined: "밀폐공간 작업에 필요한 보호구 착용 여부" },
+    { confined: "밀폐공간의 환기 설비 설치 여부" },
+    { confined: "작업자의 개인통신장비 및 휴대용 산소농도측정기 착용 여부" },
+    { confined: "구조장비(구급함/구명줄/삼각대 등) 준비 여부" },
+    { confined: "가스 및 산소농도 측정 여부" },
+    { confined: "전화하면 5분이내 구조할 수 있는 위치에 구조팀 대기" },
+    { confined: `필요한 구조팀 담당자 성명: ${g("hw_er_contact_name") || "___"}` },
+  ] as (string | { confined: string })[];
+
+  const HEIGHT_CHECKLIST = [
+    { section: "작업시작 전 점검사항(작업장비의 작동상태점검)", items: [
+      "비상정지장치 및 비상 하강 방지장치 기능의 이상 유무",
+      "과부하 방지 장치의 작동 유무(와이어로프 또는 체인구동방식의 경우)",
+      "아웃트리거 또는 바퀴의 이상 유무",
+      "작업면의 기울기 또는 요철 유무",
+      "활선 작업용 장치의 경우 홈·균열·파손 등 그 밖의 손상 유무",
+    ]},
+    { section: "작업 시 준수사항", items: [
+      "바닥 면과 고소작업대가 수평을 유지하는가?",
+      "작업자가 안전모·안전대 등의 보호구를 착용하였는가?",
+      "관계자가 아닌 사람이 작업 구역에 들어오지 못하도록 조치하였는가?",
+    ]},
+    { section: "이동 시 준수사항", items: [
+      "작업대를 가장 낮게 내릴 것",
+      "작업대를 올린 상태에서 작업자를 태우고 이동하지 말 것",
+      "이동 통로의 요철 상태 또는 장애물의 유무 등을 확인할 것",
+    ]},
+  ];
+
+  // ── 작업종류 표시
+  const workTypeLabel = () => {
+    if (workCat === "general") return "일반작업 ✓";
+    if (workCat === "safety") {
+      const types = [];
+      if (sw.hotWork) types.push("발화(화기)");
+      if (sw.confinedSpace) types.push("밀폐");
+      if (sw.heightWork) types.push("고소");
+      if (sw.crane) types.push("크레인");
+      if (sw.electrical) types.push("전기");
+      return `안전작업: ${types.join(", ") || "—"}`;
+    }
+    return "특별작업";
+  };
+
+  const workTypeCells = () => {
+    const safety = ["hotWork:발화(화기)", "confinedSpace:밀폐", "heightWork:고소", "crane:크레인", "electrical:전기"];
+    return safety.map(s => {
+      const [key, label] = s.split(":");
+      const checked = workCat === "safety" && !!sw[key];
+      return `<td style="text-align:center;border:1px solid #000;padding:2px;font-size:8pt;">${checked ? "☑" : "☐"} ${label}</td>`;
+    }).join("");
+  };
+
+  const checklistRows = (items: (string | { confined: string })[], oxData: Record<string, string>) => {
+    let mainCount = 0; let confCount = 0; let inConf = false;
+    let rows = "";
+    items.forEach((item, i) => {
+      const isConf = typeof item === "object";
+      const text = isConf ? item.confined : item;
+      const val = ox(oxData[i] ?? "");
+      if (!inConf && isConf) {
+        inConf = true;
+        rows += `<tr><td colspan="2" style="background:#e8f0fe;font-size:7.5pt;font-weight:bold;padding:2px 6px;border:1px solid #000;">밀폐공간 작업 시 (체크)</td><td style="text-align:center;border:1px solid #000;">${val}</td></tr>`;
+        confCount++;
+      } else {
+        const num = isConf ? ++confCount + 8 : ++mainCount;
+        rows += `<tr><td style="padding:2px 6px;border:1px solid #000;font-size:8pt;">${num}. ${text}</td><td style="text-align:center;border:1px solid #000;width:40px;font-size:10pt;">${val}</td></tr>`;
+      }
+    });
+    return rows;
+  };
+
+  const html = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<title>작업허가증 - ${permit.title || "(제목 없음)"}</title>
+<style>
+  @page { size: A4; margin: 8mm 10mm; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Malgun Gothic', 'Apple SD Gothic Neo', sans-serif; font-size: 9pt; color: #000; background: white; }
+  table { width: 100%; border-collapse: collapse; }
+  td, th { border: 1px solid #000; padding: 3px 5px; vertical-align: middle; }
+  .section { margin-bottom: 4px; }
+  .section-title { font-weight: bold; font-size: 9pt; margin: 6px 0 2px; }
+  .th-label { background: #f0f0f0; font-weight: bold; text-align: center; white-space: nowrap; width: 70px; }
+  .th-label-wide { background: #f0f0f0; font-weight: bold; text-align: center; white-space: nowrap; width: 90px; }
+  .center { text-align: center; }
+  .bold { font-weight: bold; }
+  .sig-area { text-align: center; min-height: 34px; }
+  .page-break { page-break-before: always; }
+  .rotated { writing-mode: vertical-rl; transform: rotate(180deg); text-align: center; font-weight: bold; font-size: 8pt; white-space: nowrap; }
+  .sub-section-hd { background: #dde7f5; font-weight: bold; font-size: 8pt; text-align: center; padding: 2px; }
+</style>
+</head>
+<body>
+
+<!-- ══════ 메인 허가증 ══════ -->
+<table style="margin-bottom:3px;border:none;">
+  <tr>
+    <td style="border:none;width:65%;vertical-align:bottom;">
+      <div style="font-size:20pt;font-weight:bold;letter-spacing:10px;text-align:center;">작 업 허 가 증</div>
+      <div style="text-align:center;font-size:9pt;">(Work Permit)</div>
+    </td>
+    <td style="border:none;width:35%;text-align:right;vertical-align:top;">
+      <div style="font-size:18pt;font-weight:bold;color:#e05a2b;letter-spacing:2px;">CHM</div>
+      <div style="font-size:8pt;">(주)씨에이치엠</div>
+    </td>
+  </tr>
+</table>
+
+<!-- 1. 작업개요 -->
+<div class="section-title">1. 작업개요&nbsp;&nbsp;<span style="float:right;font-weight:normal;font-size:8pt;">문서번호: ${g("hw_permitNo") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}</span></div>
+<table class="section">
+  <tr>
+    <td class="th-label">작업 일자</td>
+    <td colspan="3">${fmtDate(permit.startDate)} ~ ${fmtDate(permit.endDate)}&nbsp;&nbsp;작업예정시간: ${permit.startTime || "__"}:__ ~ ${permit.endTime || "__"}:__</td>
+  </tr>
+  <tr>
+    <td class="th-label">작업 장소</td>
+    <td colspan="3">${permit.location || permit.siteName || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작업 내용</td>
+    <td colspan="3" style="min-height:36px;">${permit.description || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작업 종류</td>
+    <td colspan="3">
+      <table style="border:none;width:100%;">
+        <tr>
+          <td style="border:none;font-size:8pt;width:80px;font-weight:bold;">특별안전작업</td>
+          <td style="border:none;width:16px;font-size:8pt;">${workCat === "special" ? "☑" : "☐"}</td>
+          <td style="border:none;font-size:8pt;font-weight:bold;width:50px;">안전작업</td>
+          ${workTypeCells()}
+          <td style="border:none;font-size:8pt;font-weight:bold;width:50px;">일반작업</td>
+          <td style="border:none;font-size:8pt;">${workCat === "general" ? "☑" : "☐"}</td>
+        </tr>
+      </table>
+    </td>
+  </tr>
+  <tr>
+    <td class="th-label" rowspan="2">발주처 / 시공사</td>
+    <td style="width:70px;text-align:center;font-weight:bold;font-size:8pt;background:#f8f8f8;">입주사 관리자</td>
+    <td>소속: ${g("ap1_client_org") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}&nbsp; 성명: ${g("ap1_client_name") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}&nbsp; ☎ ${g("ap1_client_tel") || "___"}</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap1_client_sigImg") || "(서명)"}</td>
+  </tr>
+  <tr>
+    <td style="width:70px;text-align:center;font-weight:bold;font-size:8pt;background:#f8f8f8;">시공사<br>안전관리자</td>
+    <td>소속: ${g("ap1_contractor_org") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}&nbsp; 성명: ${g("ap1_contractor_name") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;"}&nbsp; ☎ ${g("ap1_contractor_tel") || "___"}</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap1_contractor_sigImg") || "(서명)"}</td>
+  </tr>
+</table>
+
+<!-- 2. 작업허가 승인 전 안전조치 확인 -->
+<div class="section-title">2. 작업허가 승인 전 안전조치 확인</div>
+<table class="section">
+  <tr>
+    <th class="th-label-wide" style="width:80px;">구분</th>
+    <th>작업 전 안전조치사항</th>
+    <th style="width:60px;">작업감독자</th>
+  </tr>
+  ${SAFETY_ITEMS.map(item => {
+    const val = permit.safetyChecklist?.[item.key];
+    const mark = val === "양호" ? "✓" : val === "불량" ? "✗" : val === "해당없음" ? "—" : "";
+    return `<tr>
+      <td class="th-label" style="text-align:center;">${item.label}</td>
+      <td>${item.detail}</td>
+      <td class="center">${mark}</td>
+    </tr>`;
+  }).join("")}
+  <tr>
+    <td colspan="2" style="padding:2px;">
+      <table style="border:none;width:100%;"><tr>
+        <td style="border:none;font-weight:bold;font-size:8pt;width:120px;">시공사 작업감독자 (서명)</td>
+        <td class="sig-area" style="border:none;">${sigImg("ap1_contractor_sigImg") || g("ap1_contractor_name") || "(서명)"}</td>
+        <td style="border:none;text-align:center;font-size:8pt;width:80px;font-weight:bold;">안전담당자</td>
+        <td class="sig-area" style="border:none;">${sigImg("ap2_safety_sigImg") || g("ap2_safety_name") || "(서명)"}</td>
+        <td style="border:none;text-align:center;font-size:8pt;width:80px;font-weight:bold;">SHE관리원</td>
+        <td class="sig-area" style="border:none;">${sigImg("ap2_she_sigImg") || g("ap2_she_name") || "(서명)"}</td>
+      </tr></table>
+    </td>
+    <td class="center" style="font-size:8pt;">확인</td>
+  </tr>
+</table>
+
+<!-- 3. 작업허가 승인 -->
+<div class="section-title">3. 작업허가 승인 <span style="font-size:7.5pt;font-weight:normal;">(승인권자 부재 시 사전에 위임된 대리 승인권자가 승인)</span></div>
+<table class="section">
+  <tr>
+    <td class="th-label">작업허가 승인</td>
+    <td>결재 결과:&nbsp;
+      ${permit.approvalDecision === "approved" ? "<b>✅ 승인</b>" :
+        permit.approvalDecision === "conditionally_approved" ? "<b>⚠️ 조건부 승인</b>" :
+        permit.approvalDecision === "rejected" ? "<b>❌ 반려</b>" : "(미결재)"}
+      ${permit.approvalConditions ? `<br><span style="font-size:7.5pt;">조건: ${permit.approvalConditions}</span>` : ""}
+    </td>
+    <td style="width:80px;font-weight:bold;font-size:8pt;text-align:center;">관리소장</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap3_manager_sigImg") || g("ap3_manager_name") || "(서명)"}</td>
+  </tr>
+  ${hasExt ? `<tr>
+    <td class="th-label">작업허가 연장</td>
+    <td>연장기간: ${g("extensionPeriod") || "___"}&nbsp;&nbsp;사유: ${g("extensionReason") || "___"}</td>
+    <td style="width:80px;font-weight:bold;font-size:8pt;text-align:center;">관리소장(연장)</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap31_manager_sigImg") || g("ap31_manager_name") || "(서명)"}</td>
+  </tr>
+  <tr>
+    <td class="th-label"></td>
+    <td></td>
+    <td style="width:80px;font-weight:bold;font-size:8pt;text-align:center;">안전담당자(연장)</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap31_safety_sigImg") || g("ap31_safety_name") || "(서명)"}</td>
+  </tr>` : ""}
+</table>
+
+<!-- 4. 작업자 안전교육 -->
+<div class="section-title">4. 작업자 안전교육&nbsp;&nbsp;<span style="font-size:8pt;font-weight:normal;">교육담당자: ${g("eduTrainer_name") || "___"}</span></div>
+<table class="section">
+  <tr>
+    <td class="th-label">교육 내용</td>
+    <td colspan="5">${g("eduContent") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <th class="th-label">소속</th>
+    <th>성명</th>
+    <th>직종</th>
+    <th class="center" style="width:80px;">서명</th>
+    <th class="th-label">소속</th>
+    <th>성명</th>
+  </tr>
+  ${(() => {
+    const rows: string[] = [];
+    for (let i = 0; i < Math.max(eduRows.length, 4); i += 2) {
+      const a = eduRows[i], b = eduRows[i + 1];
+      rows.push(`<tr>
+        <td style="font-size:8pt;">${a?.org || "&nbsp;"}</td>
+        <td style="font-size:8pt;">${a?.name || "&nbsp;"}</td>
+        <td style="font-size:8pt;">${a?.job || "&nbsp;"}</td>
+        <td class="sig-area">&nbsp;</td>
+        <td style="font-size:8pt;">${b?.org || "&nbsp;"}</td>
+        <td style="font-size:8pt;">${b?.name || "&nbsp;"}</td>
+      </tr>`);
+    }
+    return rows.join("");
+  })()}
+</table>
+
+<!-- 5. 작업완료 확인 -->
+<div class="section-title">5. 작업완료 확인</div>
+<table class="section">
+  <tr>
+    <td style="width:120px;font-weight:bold;font-size:8pt;text-align:center;">현장소장 (시공사)</td>
+    <td class="sig-area">${sigImg("ap4_site_sigImg") || g("ap4_site_name") || "(서명)"}</td>
+    <td style="width:120px;font-weight:bold;font-size:8pt;text-align:center;">작업감독자 확인</td>
+    <td class="sig-area">${sigImg("ap4_supervisor_sigImg") || g("ap4_supervisor_name") || "(서명)"}</td>
+  </tr>
+</table>
+
+${isHot ? `
+<!-- ══════ 화기취급작업 신청서 ══════ -->
+<div class="page-break"></div>
+<div class="section-title bold" style="font-size:13pt;text-align:center;margin-bottom:6px;">화기취급작업 신청서</div>
+<table class="section">
+  <tr>
+    <td class="th-label" rowspan="2">허 가 사 항</td>
+    <td>허가번호: ${g("hw_permitNo") || "___"}</td>
+    <td>허가일자: ${fmtDate(permit.startDate)}</td>
+  </tr>
+  <tr>
+    <td colspan="2">작업일시: ${fmtDate(permit.startDate)} ${permit.startTime || ""}:__ ~ ${permit.endTime || ""}:__</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 명<br>사용 장비</td>
+    <td colspan="2">${g("hw_workDesc") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 구 분</td>
+    <td colspan="2">${["용접","용단","땜","연마","기타"].map(t => `${hwWorkTypes.includes(t) ? "☑" : "☐"} ${t}`).join("&nbsp;&nbsp;")}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 구 역</td>
+    <td colspan="2">${g("hw_zone") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label" rowspan="5">초기<br>대응<br>체계</td>
+    <td colspan="2">
+      <table style="border:none;width:100%;">
+        <tr>
+          <td colspan="3" style="border:none;text-align:center;font-weight:bold;font-size:8pt;background:#f5f5f5;padding:2px;">현장책임자</td>
+        </tr>
+        <tr>
+          <td style="border:none;font-size:8pt;text-align:center;">성명: ${g("hw_er_chief_name") || "___"}</td>
+          <td class="sig-area" style="border:none;">${sigImg("hw_er_chief_sigImg")}</td>
+          <td style="border:none;font-size:8pt;text-align:center;">연락처: ${g("hw_er_chief_tel") || "___"}</td>
+        </tr>
+        <tr>
+          <td style="border:none;text-align:center;font-weight:bold;font-size:8pt;background:#f5f5f5;padding:2px;">비상연락</td>
+          <td style="border:none;text-align:center;font-weight:bold;font-size:8pt;background:#f5f5f5;padding:2px;">초기소화</td>
+          <td style="border:none;text-align:center;font-weight:bold;font-size:8pt;background:#f5f5f5;padding:2px;">피난유도</td>
+        </tr>
+        ${["contact:비상연락","fire:초기소화","evac:피난유도"].map((r, i) => {
+          const key = r.split(":")[0];
+          return "";
+        }).join("")}
+        <tr>
+          ${["contact","fire","evac"].map(k => `<td style="border:none;text-align:center;font-size:8pt;padding:2px;">
+            성명: ${g(`hw_er_${k}_name`) || "___"}<br>
+            ${sigImg(`hw_er_${k}_sigImg`)}<br>
+            연락처: ${g(`hw_er_${k}_tel`) || "___"}
+          </td>`).join("")}
+        </tr>
+      </table>
+    </td>
+  </tr>
+</table>
+
+<div class="section-title" style="margin-top:4px;">화기작업 체크리스트 (작업전)</div>
+<table class="section">
+  <tr>
+    <th style="width:12px;padding:2px;" rowspan="${HOT_APP.length + 1}"><div class="rotated">화&nbsp;기&nbsp;작&nbsp;업&nbsp;자&nbsp;작&nbsp;성</div></th>
+    <th style="width:30%;">점검 내용</th>
+    <th style="width:40px;" class="center">결과<br>[○,×]</th>
+  </tr>
+  ${checklistRows(HOT_APP, appOX)}
+</table>
+<div style="text-align:right;font-size:8pt;margin-top:2px;">작업책임자 (서명): ${sigImg("ap11_chief_sigImg") || g("ap11_chief_name") || "___"}</div>
+
+<!-- 화기취급작업 허가서 -->
+<div class="page-break"></div>
+<div style="font-size:7.5pt;margin-bottom:3px;">[본 화기작업 허가서는 반드시 작업현장에 게시하고 작업완료 후 소방안전관리자에게 반납해야 한다.]</div>
+<div class="section-title bold" style="font-size:13pt;text-align:center;margin-bottom:6px;">화기취급작업 허가서</div>
+<table class="section">
+  <tr>
+    <td class="th-label">허 가 사 항</td>
+    <td>허가번호: ${g("hw_permitNo") || "___"}&nbsp;&nbsp;허가일자: ${fmtDate(permit.startDate)}</td>
+    <td style="width:100px;text-align:center;font-weight:bold;font-size:8pt;">소방안전관리자</td>
+    <td class="sig-area" style="width:80px;">${sigImg("ap11_fire_sigImg") || g("ap11_fire_name") || "(서명)"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">화재감시자</td>
+    <td colspan="3">성명: ${g("ap11_watch_name") || "___"}&nbsp;&nbsp;서명: ${sigImg("ap11_watch_sigImg")}&nbsp;&nbsp;연락처: ${g("ap11_watch_tel") || "___"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 명</td>
+    <td colspan="3">${g("hw_workDesc") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 구 분</td>
+    <td colspan="3">${["용접","용단","땜","연마","기타"].map(t => `${hwWorkTypes.includes(t) ? "☑" : "☐"} ${t}`).join("&nbsp;&nbsp;")}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작 업 구 역</td>
+    <td colspan="3">${g("hw_zone") || "&nbsp;"}</td>
+  </tr>
+</table>
+
+<div class="section-title" style="margin-top:4px;">화기작업 체크리스트 (작업중)</div>
+<table class="section">
+  <tr>
+    <th style="width:12px;padding:2px;" rowspan="${HOT_PERMIT.length + 1}"><div class="rotated">소방안전관리자&nbsp;확&nbsp;인</div></th>
+    <th>점검 내용</th>
+    <th style="width:40px;" class="center">결과<br>[○,×]</th>
+  </tr>
+  ${checklistRows(HOT_PERMIT, permitOX)}
+</table>
+<table class="section" style="margin-top:4px;">
+  <tr>
+    <td class="th-label" rowspan="3" style="width:80px;">작업종료후<br>안전조치<br>(작업종료 후 작성→반납)</td>
+    <td>1. 불티 잔존 여부(작업 종료 후 30분 후 확인)</td>
+    <td class="sig-area" style="width:80px;" rowspan="3">${sigImg("ap11_chief_sigImg") || g("ap11_chief_name") || "(서명)"}</td>
+  </tr>
+  <tr><td>2. 전원차단 상태</td></tr>
+  <tr><td>3. 인화성ㆍ가연성 물품의 보관상태</td></tr>
+  <tr>
+    <td colspan="2" style="font-weight:bold;text-align:right;font-size:8pt;">반 납 확 인&nbsp;&nbsp;소방안전관리자 (서명)</td>
+    <td class="sig-area">${sigImg("ap11_fire_sigImg") || g("ap11_fire_name") || "(서명)"}</td>
+  </tr>
+</table>
+` : ""}
+
+${isHeight ? `
+<!-- ══════ 고소작업대 작업 허가서 ══════ -->
+<div class="page-break"></div>
+<div class="section-title bold" style="font-size:13pt;text-align:center;text-decoration:underline;margin-bottom:6px;">고소작업대 작업 허가서</div>
+<div class="section-title" style="font-size:8pt;">1. 작업 허가 승인 전 확인 사항: 장비 투입 전 작업수행부서 작업 감독이 확인 후 서명</div>
+<table class="section">
+  <tr><td colspan="4" style="background:#f0f0f0;font-weight:bold;font-size:8pt;">가. 작업 개요</td></tr>
+  <tr>
+    <td class="th-label" style="width:60px;">업 체 명</td>
+    <td>${permit.contractor || "&nbsp;"}</td>
+    <td class="th-label" style="width:70px;">작업 지휘자</td>
+    <td>${g("ap13_foreman_name") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label" rowspan="2">운전자</td>
+    <td>성명: ${g("aw_operatorName") || "&nbsp;"}</td>
+    <td class="th-label">유도자(통제원)</td>
+    <td>${g("ap13_watcher_name") || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td>자격(면허): ${g("aw_operatorLicense") || "&nbsp;"}</td>
+    <td class="th-label">작업 장소</td>
+    <td>${permit.location || "&nbsp;"}</td>
+  </tr>
+  <tr>
+    <td class="th-label">작업내용</td>
+    <td colspan="3">${permit.description || "&nbsp;"}</td>
+  </tr>
+  <tr><td colspan="4" style="background:#f0f0f0;font-weight:bold;font-size:8pt;">나. 장비 제원</td></tr>
+  <tr>
+    <td class="th-label">장비 종류</td>
+    <td colspan="3">${["수직형","굴절형","직진붐형","직진Z형","궤도형"].map(t => {
+      const sel = (g("aw_equipType") || "").includes(t);
+      return `${sel ? "☑" : "☐"} ${t}`;
+    }).join("&nbsp;&nbsp;")}</td>
+  </tr>
+  <tr>
+    <td class="th-label">자체 중량</td>
+    <td>${g("aw_specWeight") || "&nbsp;"} 톤</td>
+    <td class="th-label">탑승기준인원</td>
+    <td>${g("aw_specPersons") || "&nbsp;"} 인승</td>
+  </tr>
+  <tr>
+    <td class="th-label">최대적재중량</td>
+    <td>${g("aw_specMaxLoad") || "&nbsp;"} kg</td>
+    <td class="th-label">최대작업높이</td>
+    <td>${g("aw_specMaxHeight") || "&nbsp;"} m</td>
+  </tr>
+</table>
+
+<div class="section-title" style="font-size:8pt;margin-top:4px;">2. 작업 허가 승인 후 안전조치 사항: 장비 투입 후 작업책임자가 확인 후 서명</div>
+<table class="section">
+  <tr>
+    <th style="width:100px;">구 분</th>
+    <th>조치 내용</th>
+    <th style="width:36px;" class="center">양호</th>
+    <th style="width:36px;" class="center">불량</th>
+  </tr>
+  ${HEIGHT_CHECKLIST.map((group, gi) => {
+    let globalIdx = HEIGHT_CHECKLIST.slice(0, gi).reduce((s, g) => s + g.items.length, 0);
+    return `<tr>
+      <td style="background:#fef3c7;font-size:8pt;font-weight:bold;text-align:center;" rowspan="${group.items.length}">${group.section}</td>
+      <td style="font-size:8pt;">${group.items[0]}</td>
+      <td class="center">${permit.safetyChecklist?.[`aw_${globalIdx}`] === "양호" ? "✓" : ""}</td>
+      <td class="center">${permit.safetyChecklist?.[`aw_${globalIdx}`] === "불량" ? "✓" : ""}</td>
+    </tr>
+    ${group.items.slice(1).map((item, j) => {
+      const idx = globalIdx + j + 1;
+      return `<tr>
+        <td style="font-size:8pt;">${item}</td>
+        <td class="center">${permit.safetyChecklist?.[`aw_${idx}`] === "양호" ? "✓" : ""}</td>
+        <td class="center">${permit.safetyChecklist?.[`aw_${idx}`] === "불량" ? "✓" : ""}</td>
+      </tr>`;
+    }).join("")}`;
+  }).join("")}
+</table>
+<div style="text-align:right;font-size:8pt;margin-top:3px;">작업책임자: ${g("ap13_chief_name") || "___"}&nbsp;&nbsp;(서명)&nbsp;${sigImg("ap13_chief_sigImg")}</div>
+<table class="section" style="margin-top:4px;">
+  <tr>
+    <td class="th-label" rowspan="2">고소작업대<br>작업 허가</td>
+    <td style="width:80px;font-size:8pt;font-weight:bold;text-align:center;">검토자</td>
+    <td>성명: ${g("ap2_safety_name") || "___"}</td>
+    <td class="sig-area">${sigImg("ap2_safety_sigImg") || "(서명)"}</td>
+  </tr>
+  <tr>
+    <td style="width:80px;font-size:8pt;font-weight:bold;text-align:center;">승인자</td>
+    <td>성명: ${g("ap3_manager_name") || "___"}</td>
+    <td class="sig-area">${sigImg("ap3_manager_sigImg") || "(서명)"}</td>
+  </tr>
+</table>
+` : ""}
+
+${isConfined ? `
+<!-- ══════ 밀폐공간 안전작업 허가서 ══════ -->
+<div class="page-break"></div>
+<div class="section-title bold" style="font-size:13pt;text-align:center;margin-bottom:3px;">밀폐공간 안전작업 허가서</div>
+<div style="text-align:center;font-size:7.5pt;margin-bottom:6px;">본 허가서는 SK서린사옥의 본사 작업허가절차 (III-SHGE-0301)를 준수 함</div>
+<table class="section" style="margin-bottom:4px;border:none;">
+  <tr style="border:none;">
+    <td style="border:none;padding:2px 0;font-size:8.5pt;">ㅇ 신청인:&nbsp;부서 ${g("cs_app_dept") || "______"}&nbsp;직책 ${g("cs_app_position") || "______"}&nbsp;성명 ${g("cs_app_name") || "______"}&nbsp;${sigImg("cs_app_sigImg") || "(서명)"}</td>
+  </tr>
+  <tr style="border:none;">
+    <td style="border:none;padding:2px 0;font-size:8.5pt;">ㅇ 작업수행시간:&nbsp;${fmtDate(permit.startDate)} ~ ${fmtDate(permit.endDate)}</td>
+  </tr>
+  <tr style="border:none;">
+    <td style="border:none;padding:2px 0;font-size:8.5pt;">ㅇ 작업장소:&nbsp;${permit.location || "___"}</td>
+  </tr>
+  <tr style="border:none;">
+    <td style="border:none;padding:2px 0;font-size:8.5pt;">ㅇ 작업내용:&nbsp;${permit.description || "___"}</td>
+  </tr>
+  <tr style="border:none;">
+    <td style="border:none;padding:2px 0;font-size:8.5pt;">ㅇ 작업관리감독자:&nbsp;부서 ${g("cs_sup_dept") || "______"}&nbsp;직책 ${g("cs_sup_position") || "______"}&nbsp;성명 ${g("cs_sup_name") || "______"}&nbsp;${sigImg("cs_sup_sigImg") || "(서명)"}</td>
+  </tr>
+</table>
+<p style="font-size:8.5pt;margin-bottom:4px;font-weight:bold;">위 공간에서의 작업을 다음의 조건하에서만 허가함.</p>
+<table class="section">
+  <tr>
+    <td colspan="2" style="font-size:8.5pt;">1. 화기작업허가 필요유무:&nbsp;&nbsp;${isHot ? "☑" : "☐"} 필요&nbsp;&nbsp;${!isHot ? "☑" : "☐"} 불필요</td>
+  </tr>
+  <tr>
+    <td colspan="2" style="font-size:8.5pt;">2. 내연기관(양수기) 또는 갈탄 등의 사용여부:&nbsp;&nbsp;☐ 사용&nbsp;&nbsp;☐ 미사용</td>
+  </tr>
+  <tr>
+    <td colspan="2" style="background:#f0f0f0;font-weight:bold;font-size:8pt;">3. 안전조치 요구사항</td>
+  </tr>
+  <tr>
+    <th style="width:65%;">확인 항목</th>
+    <th style="width:35%;" class="center">확인결과</th>
+  </tr>
+  ${[
+    "안전담당자지정 및 감시인 배치",
+    "밸브차단, 맹판설치, 불활성가스 치환, 용기세정",
+    "산소농도 및 유해가스농도 (계속)측정",
+    "환기시설 설치",
+    "전화 및 무선기기 구비",
+    "소화기 비치",
+    "방폭형 전기기계기구의 사용",
+    "공기공급식 호흡용보호구 비치",
+    "안전장구 구비",
+    "안전교육 실시",
+  ].map(item => `<tr>
+    <td style="font-size:8.5pt;">${item}</td>
+    <td class="center">&nbsp;</td>
+  </tr>`).join("")}
+  <tr>
+    <td colspan="2" style="background:#f0f0f0;font-weight:bold;font-size:8pt;">5. 산소 및 유해가스 농도 측정결과</td>
+  </tr>
+  <tr>
+    <th style="font-size:7.5pt;">측정물질명</th>
+    <th style="font-size:7.5pt;">농도기준</th>
+  </tr>
+  ${[
+    ["산소 (O2)", "18~23.5 %"],
+    ["이산화탄소 (CO2)", "1.5 % 미만"],
+    ["일산화탄소 (CO)", "30 ppm 미만"],
+    ["황화수소 (H₂S)", "10 ppm 미만"],
+    ["가연성가스 (Ex)", "LFL 10 % 이내"],
+  ].map(([name, std]) => `<tr>
+    <td style="font-size:8pt;">${name}</td>
+    <td style="font-size:8pt;">${std}</td>
+  </tr>`).join("")}
+  <tr>
+    <td colspan="2" style="font-size:8.5pt;">6. 특별조치 필요사항:</td>
+  </tr>
+  <tr>
+    <td colspan="2" style="font-weight:bold;text-align:right;font-size:8.5pt;">
+      최종허가자&nbsp;&nbsp;부서: SK서린사옥 관리사무실&nbsp;&nbsp;직책: 관리소장&nbsp;&nbsp;성명: ${g("ap3_manager_name") || "___"}&nbsp;&nbsp;${sigImg("ap3_manager_sigImg") || "(서명)"}
+    </td>
+  </tr>
+</table>
+` : ""}
+
+</body>
+</html>`;
+
+  const win = window.open("", "_blank", "width=900,height=1200");
+  if (!win) return;
+  win.document.write(html);
+  win.document.close();
+  win.onload = () => { win.focus(); win.print(); };
+}
+
 // ── 엑셀 내보내기 ─────────────────────────────────────────────
 async function exportPermitExcel(permit: WorkPermit) {
   const XLSX = await import("xlsx");
@@ -1367,10 +2012,10 @@ function PermitDetail({ permit, onClose, mode = "modal" }: { permit: WorkPermit;
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             <button
-              onClick={() => window.print()}
+              onClick={() => printPermitForm(permit)}
               className="text-xs px-3 py-1.5 rounded-xl border font-medium transition-all hover:opacity-80"
               style={{ borderColor: "#e2e8f0", color: "#475569" }}
-              title="인쇄 / 미리보기"
+              title="허가서 인쇄"
             >
               🖨️ 인쇄
             </button>
