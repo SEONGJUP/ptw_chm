@@ -1898,26 +1898,16 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
             header="교육 참여 작업자 명단"
             rows={eduRows as Record<string, string>[]}
             cols={[
-              { key: "org",       label: "소속",  placeholder: "소속" },
-              { key: "name",      label: "성명",  placeholder: "성명" },
-              { key: "job",       label: "직종",  placeholder: "직종" },
-              { key: "signature", label: "서명",  placeholder: "서명" },
+              { key: "org",   label: "소속",   placeholder: "소속" },
+              { key: "name",  label: "성명",   placeholder: "성명" },
+              { key: "job",   label: "직종",   placeholder: "직종" },
+              { key: "tel",   label: "연락처", placeholder: "연락처" },
             ]}
             borderColor="#e2e8f0" headerBg="#f8fafc"
             onAdd={() => setEdu([...eduRows, { org: "", name: "", job: "", signature: "" }])}
             onRemove={i => setEdu(eduRows.filter((_, j) => j !== i))}
             onUpdate={(i, k, v) => { const n = [...eduRows]; n[i] = { ...n[i], [k]: v }; setEdu(n as EduRow[]); }}
           />
-          <div>
-            <label className={LBL}>교육 내용</label>
-            <textarea className={INP + " resize-none"} rows={2} value={get("eduContent")} onChange={e => set("eduContent", e.target.value)} placeholder="실시한 안전교육 내용 기입" />
-          </div>
-          <div>
-            <label className={LBL}>교육 담당자</label>
-            <SignaturePanel>
-              <PersonRow label="담당자" prefix="eduTrainer" get={get} set={set} />
-            </SignaturePanel>
-          </div>
         </div>
       </div>
 
@@ -2003,11 +1993,7 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       )}
       {safeBuddyModal && (
         <SafeBuddyEduModal
-          onImport={({ title, content, trainerOrg, trainerName }) => {
-            set("eduContent", content);
-            set("eduTrainer_org", trainerOrg);
-            set("eduTrainer_name", trainerName);
-          }}
+          onImport={() => {}}
           onClose={() => setSafeBuddyModal(false)}
         />
       )}
