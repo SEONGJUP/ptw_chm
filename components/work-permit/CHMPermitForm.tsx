@@ -1724,6 +1724,33 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
         </div>
       </div>
 
+      {/* ══════ 작성완료 버튼 ══════ */}
+      {get("formCompleted") !== "true" ? (
+        <div className="flex justify-end px-1">
+          <button
+            onClick={() => set("formCompleted", "true")}
+            className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
+            style={{ background: "#00B7AF" }}
+          >
+            <span>✅</span>
+            <span>작성완료 및 서명진행</span>
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between px-1">
+          <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5">
+            <span className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px]">✓</span>
+            작성완료 — 우측에서 서명 결재가 진행됩니다
+          </span>
+          <button
+            onClick={() => set("formCompleted", "false")}
+            className="text-xs text-slate-400 hover:text-slate-600 underline transition-colors"
+          >
+            수정하기
+          </button>
+        </div>
+      )}
+
       {/* ══════ 섹션 5: 작업 연장 여부 ══════ */}
       <div className={CARD}>
         <SectionHeader num={4} title="작업 연장 여부" />

@@ -809,6 +809,7 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
   const isConfinedSpace = !!sw.confinedSpace;
   const isHeightWork = !!sw.heightWork;
   const hasExtension = getSpec("hasExtension") === "true";
+  const formCompleted = getSpec("formCompleted") === "true";
 
   const activeStage = permit.signatures.find((s) => s.status === "pending")?.stage ?? 5;
 
@@ -964,13 +965,19 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
           const sig = permit.signatures.find((s) => s.stage === 1);
           if (!sig) return null;
           const done = sig.status === "signed";
-          const isActive = activeStage === 1;
-          const isLocked = activeStage > 1 && !done;
+          const isActive = activeStage === 1 && formCompleted;
+          const isLocked = !formCompleted || (activeStage > 1 && !done);
           const c = STAGE_COLORS[1];
           return (
-            <div className="rounded-xl border overflow-hidden" style={{ borderColor: done ? "#d1fae5" : isActive ? c + "40" : "#f1f5f9", opacity: isLocked ? 0.5 : 1 }}>
+            <div className="rounded-xl border overflow-hidden transition-all" style={{ borderColor: done ? "#d1fae5" : isActive ? c + "40" : "#f1f5f9", opacity: isLocked ? 0.45 : 1 }}>
               <StageHeader stageNum={1} icon="📋" title="작업개요 및 사전점검" desc="입주사관리자 · 시공사 안전관리자 서명"
                 color={c} done={done} isActive={isActive} signedAt={sig.signedAt} />
+              {!formCompleted && !done && (
+                <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center gap-2">
+                  <span className="text-slate-400 text-sm">🔒</span>
+                  <p className="text-xs text-slate-400">좌측 양식을 작성 완료한 후 서명이 진행됩니다</p>
+                </div>
+              )}
               {(isActive || done) && (
                 <div className="px-3 pb-3 pt-1 bg-white border-t border-slate-50 space-y-1.5">
                   <SigRow specKey="ap1_client" label="입주사 관리자" />
