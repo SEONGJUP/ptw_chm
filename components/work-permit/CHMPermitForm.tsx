@@ -558,7 +558,7 @@ const MOCK_SAFEBUDDY_EDU = [
   { id: "edu5", title: "작업허가서 작성 교육", date: "2025-10-15", trainer: "정소장", org: "현장관리팀", content: "작업허가서 작성 절차, 서명 결재 프로세스, 안전조치 확인사항 교육" },
 ];
 
-type EduRow = { org: string; name: string; job: string; signature: string };
+type EduRow = { type: string; detail: string; date: string; duration: string; instructor: string; count: string };
 
 function SafeBuddyEduModal({
   onImport,
@@ -616,6 +616,90 @@ function SafeBuddyEduModal({
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+const EDU_TYPES = ["정기교육", "신규채용자 교육", "작업내용 변경 시 교육", "특별교육", "기초안전보건교육", "기타"];
+
+function EduTable({
+  rows, onAdd, onRemove, onUpdate,
+}: {
+  rows: EduRow[];
+  onAdd: () => void;
+  onRemove: (i: number) => void;
+  onUpdate: (i: number, key: keyof EduRow, val: string) => void;
+}) {
+  const COLS = [
+    { key: "type",       label: "교육종류",     w: "140px" },
+    { key: "detail",     label: "교육세부종류",  w: "1fr"   },
+    { key: "date",       label: "교육날짜",     w: "130px" },
+    { key: "duration",   label: "교육시간",     w: "80px"  },
+    { key: "instructor", label: "강사명",       w: "90px"  },
+    { key: "count",      label: "수료자 수",    w: "70px"  },
+  ];
+  const gridCols = `1.5rem ${COLS.map(c => c.w).join(" ")} 1.5rem`;
+
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2">
+        <span className={GTITLE}>교육 참여 작업자 명단</span>
+        <AddBtn onClick={onAdd} />
+      </div>
+      {rows.length === 0 ? (
+        <div className="rounded-xl border-2 border-dashed border-slate-200 py-5 text-center">
+          <p className="text-xs text-slate-400">추가 버튼으로 교육 항목을 입력하세요</p>
+        </div>
+      ) : (
+        <div className="rounded-xl overflow-hidden border border-slate-200">
+          {/* 헤더 */}
+          <div className="grid text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-2 bg-slate-50"
+            style={{ gridTemplateColumns: gridCols }}>
+            <span>#</span>
+            {COLS.map(c => <span key={c.key}>{c.label}</span>)}
+            <span />
+          </div>
+          {/* 행 */}
+          {rows.map((row, i) => (
+            <div key={i} className="grid items-center px-3 py-1.5 gap-2 border-t border-slate-100 bg-white"
+              style={{ gridTemplateColumns: gridCols }}>
+              <span className="text-[10px] text-slate-400 font-bold">{i + 1}</span>
+
+              {/* 교육종류 — select */}
+              <select
+                className={TINP + " cursor-pointer"}
+                value={row.type}
+                onChange={e => onUpdate(i, "type", e.target.value)}>
+                <option value="">선택</option>
+                {EDU_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+              </select>
+
+              {/* 교육세부종류 */}
+              <input className={TINP} value={row.detail} placeholder="세부 내용"
+                onChange={e => onUpdate(i, "detail", e.target.value)} />
+
+              {/* 교육날짜 */}
+              <input type="date" className={TINP} value={row.date}
+                onChange={e => onUpdate(i, "date", e.target.value)} />
+
+              {/* 교육시간 */}
+              <input className={TINP} value={row.duration} placeholder="1시간"
+                onChange={e => onUpdate(i, "duration", e.target.value)} />
+
+              {/* 강사명 */}
+              <input className={TINP} value={row.instructor} placeholder="홍길동"
+                onChange={e => onUpdate(i, "instructor", e.target.value)} />
+
+              {/* 수료자 수 */}
+              <input type="number" min={0} className={TINP} value={row.count} placeholder="0"
+                onChange={e => onUpdate(i, "count", e.target.value)} />
+
+              <button onClick={() => onRemove(i)}
+                className="text-slate-300 hover:text-red-400 text-xs transition-colors">✕</button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1894,19 +1978,11 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
             </button>
           </div>
 
-          <PersonTable
-            header="교육 참여 작업자 명단"
-            rows={eduRows as Record<string, string>[]}
-            cols={[
-              { key: "org",   label: "소속",   placeholder: "소속" },
-              { key: "name",  label: "성명",   placeholder: "성명" },
-              { key: "job",   label: "직종",   placeholder: "직종" },
-              { key: "tel",   label: "연락처", placeholder: "연락처" },
-            ]}
-            borderColor="#e2e8f0" headerBg="#f8fafc"
-            onAdd={() => setEdu([...eduRows, { org: "", name: "", job: "", signature: "" }])}
+          <EduTable
+            rows={eduRows}
+            onAdd={() => setEdu([...eduRows, { type: "", detail: "", date: "", duration: "", instructor: "", count: "" }])}
             onRemove={i => setEdu(eduRows.filter((_, j) => j !== i))}
-            onUpdate={(i, k, v) => { const n = [...eduRows]; n[i] = { ...n[i], [k]: v }; setEdu(n as EduRow[]); }}
+            onUpdate={(i, k, v) => { const n = [...eduRows]; n[i] = { ...n[i], [k]: v }; setEdu(n); }}
           />
         </div>
       </div>
