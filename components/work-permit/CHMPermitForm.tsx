@@ -1134,7 +1134,7 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
 
   return (
     <div className="rounded-2xl overflow-hidden border border-amber-200 shadow-sm">
-      <SubBanner icon="🏗️" title="고소작업대 작업 허가서" color="#92400e" bg="#fffbeb" />
+      <SubBanner icon="🏗️" title="중량물/장비취급 작업 허가서" color="#92400e" bg="#fffbeb" />
       <div className="p-5 space-y-5 bg-white">
         <div className="grid grid-cols-2 gap-4">
           <div><label className={LBL}>업체명</label>
@@ -1153,6 +1153,36 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
         <div>
           <label className={LBL}>운전자 자격사항</label>
           <input className={INP} value={get("aw_operatorLicense")} onChange={e => set("aw_operatorLicense", e.target.value)} placeholder="자격증명, 자격번호 등" />
+          {/* 자격증 파일 첨부 */}
+          <div className="mt-2">
+            {get("aw_licenseFileName") ? (
+              <div className="flex items-center justify-between px-3 py-2.5 rounded-lg border border-dashed"
+                style={{ borderColor: "#d9770660", background: "#fffbeb" }}>
+                <div className="flex items-center gap-2">
+                  <span className="text-base">📄</span>
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700">첨부 완료</p>
+                    <p className="text-[11px] text-slate-500 mt-0.5 break-all">{get("aw_licenseFileName")}</p>
+                  </div>
+                </div>
+                <button onClick={() => set("aw_licenseFileName", "")}
+                  className="text-xs font-semibold text-slate-400 hover:text-red-400 transition-colors px-2 py-1 rounded hover:bg-red-50">
+                  삭제
+                </button>
+              </div>
+            ) : (
+              <label className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg border border-dashed cursor-pointer transition-all hover:border-amber-400 hover:bg-amber-50/50"
+                style={{ borderColor: "#d9770640" }}>
+                <span className="text-base">📎</span>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-amber-700">자격증 파일 첨부</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">클릭하여 파일 선택 (이미지·PDF)</p>
+                </div>
+                <input type="file" accept="image/*,.pdf" className="hidden"
+                  onChange={e => { const f = e.target.files?.[0]; if (f) set("aw_licenseFileName", f.name); }} />
+              </label>
+            )}
+          </div>
         </div>
         <div><label className={LBL}>작업내용</label>
           <textarea className={INP + " resize-none"} rows={2} value={get("aw_content")} onChange={e => set("aw_content", e.target.value)} placeholder="작업 내용 기입" /></div>
@@ -1258,13 +1288,6 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
           <input type="checkbox" className="hidden" checked={get("aw_eduConfirm") === "true"} onChange={e => set("aw_eduConfirm", String(e.target.checked))} />
           <span className="text-sm font-semibold text-slate-700">작업 전 안전교육 실시 완료 확인</span>
         </label>
-        <div>
-          <label className={LBL}>서명란</label>
-          <SignaturePanel>
-            <PersonRow label="검토자" prefix="aw_reviewOrg" get={get} set={set} />
-            <PersonRow label="승인자" prefix="aw_approveOrg" get={get} set={set} />
-          </SignaturePanel>
-        </div>
       </div>
     </div>
   );
@@ -2200,10 +2223,10 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       )}
       {workCategory === "special" && safetyWorks.heightWork && (
         <div className="space-y-2">
-          <SubFormModeToggle modeKey="heightWork_mode" label="고소작업" icon="🏗️" color="#d97706" get={get} set={set} />
+          <SubFormModeToggle modeKey="heightWork_mode" label="중량물/장비취급" icon="🏗️" color="#d97706" get={get} set={set} />
           {(get("heightWork_mode") || "form") === "form"
             ? <HeightWorkSubForm get={get} set={set} />
-            : <PdfUploadBlock label="고소작업" icon="🏗️" color="#d97706" bg="#fffbeb" storeKey="heightWork" get={get} set={set} />}
+            : <PdfUploadBlock label="중량물/장비취급" icon="🏗️" color="#d97706" bg="#fffbeb" storeKey="heightWork" get={get} set={set} />}
         </div>
       )}
 
