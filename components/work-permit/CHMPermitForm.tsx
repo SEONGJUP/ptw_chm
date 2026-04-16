@@ -1158,10 +1158,8 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
           <textarea className={INP + " resize-none"} rows={2} value={get("aw_content")} onChange={e => set("aw_content", e.target.value)} placeholder="작업 내용 기입" /></div>
         <div>
           <label className={LBL}>장비 제원</label>
-          {/* 고소작업대 종류 */}
-          <p className="text-[11px] font-semibold text-slate-400 mb-1.5 mt-1">고소작업대 종류</p>
           <div className="grid grid-cols-5 gap-x-4 gap-y-2 mb-4">
-            {["수직형", "굴절형", "직진붐형", "직진Z형", "궤도형"].map(t => {
+            {["수직형", "굴절형", "직진붐형", "직진Z형", "궤도형", "지게차", "굴삭기"].map(t => {
               const on = equipTypes.includes(t);
               return (
                 <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -1658,6 +1656,259 @@ function PrivacySection({ get, set }: { get: (k: string) => string; set: (k: str
 }
 
 // ════════════════════════════════════════════════════
+// 층수 관련 상수 & 컴포넌트
+// ════════════════════════════════════════════════════
+type FloorOption = { key: string; label: string };
+const FLOOR_OPTIONS: FloorOption[] = [
+  { key: "all",     label: "전층 공통" },
+  { key: "B7",      label: "B7층" },
+  { key: "B6",      label: "B6층" },
+  { key: "B5",      label: "B5층" },
+  { key: "B4",      label: "B4층" },
+  { key: "B3",      label: "B3층" },
+  { key: "B2",      label: "B2층" },
+  { key: "B1",      label: "B1층" },
+  { key: "F1",      label: "1층 및 외곽" },
+  ...Array.from({ length: 35 }, (_, i) => ({ key: `F${i + 2}`, label: `${i + 2}층` })),
+  { key: "rooftop", label: "옥탑층" },
+];
+
+type FloorHazardGroup = { category: string; items: string[] };
+const FLOOR_HAZARD_MAP: Record<string, FloorHazardGroup[]> = {
+  "all": [{ category: "전층 공통 위험/유해 요소", items: [
+    "비상구 및 피난경로 위치 사전 확인",
+    "소화설비(소화기·소화전) 위치 및 사용법 확인",
+    "작업구역 출입통제 및 안전표지판 설치",
+    "낙하물 방지 조치(낙하물방지망·안전난간) 설치 확인",
+    "작업 중 분진·소음 발생 시 인근 입주사 사전 통보",
+    "작업 종료 후 청결 유지 및 원상복구",
+  ]}],
+  "B7": [{ category: "B7층 위험/유해 요소", items: [
+    "지하주차장 차량 이동 동선 파악 및 작업구역 안전통제",
+    "밀폐 공간 내 유해가스(CO 등) 축적 위험 — 충분한 환기 실시",
+    "기계실·전기실 내 고압 전기설비, 회전체 접촉 위험",
+    "저조도 환경 — 조명 추가 설치로 시야 확보",
+    "소화펌프실·전기실 진입 시 시설팀 관계자 동행",
+  ]}],
+  "B6": [{ category: "B6층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "환기 불충분으로 인한 산소 결핍·유해가스 위험",
+    "설비 배관 작업 시 고압 유체 누출 위험",
+    "저조도 환경 내 보행 중 장애물 충돌 주의",
+  ]}],
+  "B5": [{ category: "B5층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "환기 불충분으로 인한 산소 결핍·유해가스 위험",
+    "설비 배관 작업 시 고압 유체 누출 위험",
+    "저조도 환경 내 보행 중 장애물 충돌 주의",
+  ]}],
+  "B4": [{ category: "B4층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "습기·결로로 인한 미끄러짐 위험",
+    "환기 불충분으로 인한 산소 결핍·유해가스 위험",
+  ]}],
+  "B3": [{ category: "B3층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "습기·결로로 인한 미끄러짐 위험",
+    "천장 배관·덕트 작업 시 고소 추락 위험",
+  ]}],
+  "B2": [{ category: "B2층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "습기·결로로 인한 미끄러짐 위험",
+    "천장 배관·덕트 작업 시 고소 추락 위험",
+  ]}],
+  "B1": [{ category: "B1층 위험/유해 요소", items: [
+    "지하주차장 차량 통행 중 작업 충돌 위험",
+    "주출입구 인근 방문객 통행 방해 및 안전사고 위험",
+    "천장 배관·덕트 작업 시 고소 추락 위험",
+    "습기·결로로 인한 미끄러짐 위험",
+  ]}],
+  "F1": [{ category: "1층 및 외곽 위험/유해 요소", items: [
+    "로비 내 방문객·임직원 통행 구역 — 작업구역 출입통제 필수",
+    "외곽 작업 시 차도·인도 인근 추락 및 낙하물 위험",
+    "우천 시 외부 작업면 미끄러짐 위험",
+    "외곽 고소작업 시 강풍으로 인한 작업 불안정 위험",
+    "주·출입구 차단 시 비상대피 동선 사전 확보",
+  ]}],
+  "rooftop": [{ category: "옥탑층 위험/유해 요소", items: [
+    "강풍으로 인한 작업자 추락 위험 — 안전대 착용 필수",
+    "고온·자외선 노출로 인한 온열질환(열사병 등) 위험",
+    "옥상 난간·개구부 근접 작업 시 추락 위험",
+    "우천·결빙 시 미끄러짐 및 낙뢰 위험",
+    "냉각탑·공조기 등 회전체·소음 노출 위험",
+    "작업 중 자재 낙하로 인한 하층부 위험 — 하부 안전통제",
+  ]}],
+};
+
+function getFloorHazards(key: string): FloorHazardGroup[] {
+  if (FLOOR_HAZARD_MAP[key]) return FLOOR_HAZARD_MAP[key];
+  const num = parseInt(key.replace("F", ""));
+  const isHigh = num >= 26;
+  const items = [
+    `${num}층 입주사 근무 중 작업 — 소음·분진 발생 시 사전 협의 필수`,
+    "천장·고소 작업 시 추락 방지 조치 — 사다리·고소작업대 활용",
+    "전기 배선·분전반 작업 시 감전 위험 — 정전 확인 후 작업",
+    "화재감지기 인근 화기작업 시 오작동 방지 커버 설치",
+  ];
+  if (isHigh) {
+    items.push("고층 창측 작업 시 추락 방지 조치 강화");
+    items.push("강풍으로 인한 창문 인근 작업 불안정 위험 주의");
+  }
+  return [{ category: `${num}층 위험/유해 요소`, items }];
+}
+
+// ════════════════════════════════════════════════════
+// 모달: 층 안내 그림
+// ════════════════════════════════════════════════════
+function FloorGuideModal({ onClose }: { onClose: () => void }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.6)" }}>
+      <div className="bg-white rounded-2xl shadow-2xl overflow-hidden flex flex-col" style={{ maxWidth: 700, width: "95vw", maxHeight: "90vh" }}>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+          <span className="text-sm font-bold text-slate-800">🏢 SK서린사옥 층 안내</span>
+          <button onClick={onClose} className="text-slate-400 hover:text-slate-600 text-lg leading-none">✕</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+          <img src="/floor-guide1.png" alt="층 안내 1" className="w-full rounded-xl border border-slate-200 object-contain" />
+          <img src="/floor-guide2.png" alt="층 안내 2" className="w-full rounded-xl border border-slate-200 object-contain" />
+        </div>
+        <div className="px-5 py-3 border-t border-slate-100 flex justify-end flex-shrink-0">
+          <button onClick={onClose}
+            className="px-6 py-2 rounded-xl text-sm font-bold text-white"
+            style={{ background: TEAL }}>닫기</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════
+// 섹션 3: SK서린사옥 위험/유해 요소
+// ════════════════════════════════════════════════════
+const SK_RISK_CARD = "bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-sm";
+
+function SKRiskSection({
+  selectedFloors,
+  get,
+  set,
+}: {
+  selectedFloors: string[];
+  get: (k: string) => string;
+  set: (k: string, v: string) => void;
+}) {
+  const [sigModal, setSigModal] = useState(false);
+
+  const riskChecked: Record<string, boolean> = (() => {
+    try { return JSON.parse(get("skRiskChecked")) || {}; } catch { return {}; }
+  })();
+  const toggleRisk = (key: string) => {
+    set("skRiskChecked", JSON.stringify({ ...riskChecked, [key]: !riskChecked[key] }));
+  };
+
+  const floorSections = selectedFloors.map(floorKey => {
+    const floorOption = FLOOR_OPTIONS.find(f => f.key === floorKey);
+    const hazards = getFloorHazards(floorKey);
+    return { floorKey, floorLabel: floorOption?.label ?? floorKey, hazards };
+  });
+
+  const allItemKeys = floorSections.flatMap(s =>
+    s.hazards.flatMap(h => h.items.map(item => `${s.floorKey}::${item}`))
+  );
+  const checkedCount = allItemKeys.filter(k => riskChecked[k]).length;
+  const sigImg = get("skRiskSignature");
+
+  return (
+    <div className={SK_RISK_CARD}>
+      <SectionHeader num={3} title="SK서린사옥 위험/유해 요소" badge={selectedFloors.length > 0 ? `확인 ${checkedCount} / ${allItemKeys.length}` : undefined} />
+      <div className="p-6 space-y-4">
+        {selectedFloors.length === 0 ? (
+          <div className="flex items-center justify-center px-4 py-8 rounded-xl border-2 border-dashed border-slate-200">
+            <p className="text-sm text-slate-400 text-center">작업 개요에서 작업 층수를 선택하면<br />해당 층의 위험/유해 요소가 표시됩니다</p>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {floorSections.map(({ floorKey, hazards }) => (
+              <div key={floorKey} className="space-y-1">
+                {hazards.map((group, gi) => (
+                  <div key={gi} className="rounded-xl overflow-hidden border border-slate-200">
+                    <div className="flex items-center justify-between px-4 py-2.5" style={{ background: `${TEAL}12` }}>
+                      <span className="text-xs font-bold" style={{ color: TEAL }}>{group.category}</span>
+                      <span className="text-[10px] font-semibold text-slate-400">
+                        {group.items.filter(item => riskChecked[`${floorKey}::${item}`]).length} / {group.items.length} 확인
+                      </span>
+                    </div>
+                    <div className="divide-y divide-slate-100">
+                      {group.items.map((item, idx) => {
+                        const key = `${floorKey}::${item}`;
+                        const checked = !!riskChecked[key];
+                        return (
+                          <div key={idx}
+                            className="flex items-center gap-3 px-4 py-3 transition-colors"
+                            style={{ background: checked ? `${TEAL}06` : "white" }}>
+                            <span className="w-5 text-[10px] font-bold text-slate-300 flex-shrink-0">{idx + 1}</span>
+                            <span className="flex-1 text-sm text-slate-700 leading-snug">{item}</span>
+                            <button onClick={() => toggleRisk(key)}
+                              className="w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                              style={{ background: checked ? TEAL : "white", borderColor: checked ? TEAL : "#e2e8f0" }}>
+                              {checked && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* 확인자 서명 */}
+        <div>
+          <label className={LBL}>확인자 서명</label>
+          <div className="rounded-xl border border-slate-100 bg-slate-50/60 px-5 py-4 space-y-3">
+            <div className="grid text-[10px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-200 ml-[4.25rem] gap-2 grid-cols-3">
+              <span>소속</span><span>성명</span><span>서명</span>
+            </div>
+            <div className="flex items-center gap-3 min-w-0">
+              <span className="text-xs font-semibold text-slate-500 w-14 flex-shrink-0 text-right">확인자</span>
+              <div className="flex-1 grid gap-2 grid-cols-3">
+                <input className={TINP} placeholder="소속" value={get("skRisk_confirmer_org")} onChange={e => set("skRisk_confirmer_org", e.target.value)} />
+                <input className={TINP} placeholder="성명" value={get("skRisk_confirmer_name")} onChange={e => set("skRisk_confirmer_name", e.target.value)} />
+                <div>
+                  {sigImg ? (
+                    <div className="relative group h-8">
+                      <img src={sigImg} alt="서명" className="h-8 w-full object-contain rounded border border-slate-200 bg-white px-1" />
+                      <button onClick={() => setSigModal(true)}
+                        className="absolute inset-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold text-white"
+                        style={{ background: "rgba(0,0,0,0.4)" }}>재서명</button>
+                    </div>
+                  ) : (
+                    <button onClick={() => setSigModal(true)}
+                      className="w-full flex items-center justify-center gap-1 py-1.5 rounded border border-dashed text-[10px] font-semibold transition-all hover:border-teal-400 hover:text-teal-500"
+                      style={{ borderColor: "#e2e8f0", color: "#94a3b8" }}>
+                      ✍️ 서명
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {sigModal && (
+        <SignatureDrawModal
+          title="확인자 서명"
+          onSave={v => { set("skRiskSignature", v); setSigModal(false); }}
+          onClose={() => setSigModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+// ════════════════════════════════════════════════════
 // 메인 CHMPermitForm
 // ════════════════════════════════════════════════════
 export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
@@ -1689,6 +1940,17 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const eduRows: EduRow[] = (() => { try { return JSON.parse(get("eduRows")) || []; } catch { return []; } })();
   const setEdu = (rows: EduRow[]) => set("eduRows", JSON.stringify(rows));
 
+  // 층수 선택
+  const selectedFloors: string[] = (() => { try { return JSON.parse(get("selectedFloors")) || []; } catch { return []; } })();
+  const toggleFloor = (key: string) => {
+    const next = selectedFloors.includes(key)
+      ? selectedFloors.filter(k => k !== key)
+      : [...selectedFloors, key];
+    set("selectedFloors", JSON.stringify(next));
+  };
+  const [floorPickerOpen, setFloorPickerOpen] = useState(false);
+  const [floorGuideOpen, setFloorGuideOpen] = useState(false);
+
   // 서명 모달 상태
   const [sigModal, setSigModal] = useState<{ target: string; label: string } | null>(null);
   const [reqModal, setReqModal] = useState<string | null>(null); // label for request modal
@@ -1698,7 +1960,7 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const WORK_TYPES = [
     { key: "hotWork",       label: "발화(화기)", icon: "🔥", color: "#dc2626", bg: "#fff1f2" },
     { key: "confinedSpace", label: "밀폐",        icon: "🚪", color: "#1d4ed8", bg: "#eff6ff" },
-    { key: "heightWork",    label: "고소",        icon: "🏗️", color: "#d97706", bg: "#fffbeb" },
+    { key: "heightWork",    label: "중량물/장비취급", icon: "🏗️", color: "#d97706", bg: "#fffbeb" },
     { key: "crane",         label: "크레인",      icon: "🏋️", color: "#7c3aed", bg: "#f5f3ff" },
     { key: "electrical",    label: "전기",        icon: "⚡", color: "#0369a1", bg: "#f0f9ff" },
   ];
@@ -1712,12 +1974,11 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   return (
     <div className="space-y-4">
 
-      {/* ══════ 비활성화 래퍼: 작성완료 후 편집 불가 ══════ */}
+      {/* ══════ 섹션 1 비활성화 래퍼: 작성완료 후 섹션1만 편집 불가 ══════ */}
       <div
         className={isCompleted ? "pointer-events-none select-none" : ""}
         style={isCompleted ? { opacity: 0.6 } : undefined}
       >
-      <div className="space-y-4">
 
       {/* ══════ 섹션 1: 작업 개요 ══════ */}
       <div className={CARD}>
@@ -1766,10 +2027,86 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
             </div>
           </div>
 
-          {/* 작업장소 */}
+          {/* 작업장소 + 층수 선택 */}
           <div>
             <label className={LBL}>작업장소</label>
-            <input className={INP} value={permit.location} onChange={e => upd("location", e.target.value)} placeholder="작업 장소 기입" />
+            <div className="flex items-start gap-2">
+              <input className={INP + " flex-1"} value={permit.location} onChange={e => upd("location", e.target.value)} placeholder="작업 장소 기입" />
+
+              {/* 층수 선택 피커 */}
+              <div className="relative flex-shrink-0">
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setFloorPickerOpen(v => !v)}
+                    className="flex items-center gap-1.5 px-3 py-2.5 rounded-lg border text-sm font-semibold transition-all whitespace-nowrap"
+                    style={{ borderColor: selectedFloors.length > 0 ? TEAL : "#e2e8f0", color: selectedFloors.length > 0 ? TEAL : "#94a3b8", background: selectedFloors.length > 0 ? `${TEAL}08` : "white" }}>
+                    층수 {selectedFloors.length > 0 ? `(${selectedFloors.length})` : "선택"}
+                    <svg className="w-3.5 h-3.5 ml-0.5" fill="none" viewBox="0 0 12 12">
+                      <path d={floorPickerOpen ? "M2 8l4-4 4 4" : "M2 4l4 4 4-4"} stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+                    </svg>
+                  </button>
+                  <button
+                    onClick={() => setFloorGuideOpen(true)}
+                    className="w-9 h-9 rounded-lg border border-slate-200 flex items-center justify-center text-slate-500 hover:text-teal-600 hover:border-teal-300 transition-all text-sm font-bold"
+                    title="층 안내 보기">
+                    ?
+                  </button>
+                </div>
+
+                {/* 클릭 외부 닫기용 오버레이 */}
+                {floorPickerOpen && (
+                  <div className="fixed inset-0 z-20" onClick={() => setFloorPickerOpen(false)} />
+                )}
+
+                {/* 드롭다운 */}
+                {floorPickerOpen && (
+                  <div className="absolute right-0 top-full mt-1 z-30 bg-white rounded-xl border border-slate-200 shadow-xl overflow-hidden" style={{ width: 200, maxHeight: 360 }}>
+                    <div className="flex items-center justify-between px-3 py-2 border-b border-slate-100 bg-slate-50">
+                      <span className="text-xs font-bold text-slate-600">층수 선택 (복수)</span>
+                      <button onClick={() => set("selectedFloors", "[]")} className="text-[10px] text-slate-400 hover:text-red-400 transition-colors">전체해제</button>
+                    </div>
+                    <div className="overflow-y-auto" style={{ maxHeight: 280 }}>
+                      {FLOOR_OPTIONS.map(({ key, label }) => {
+                        const on = selectedFloors.includes(key);
+                        return (
+                          <label key={key}
+                            className="flex items-center gap-2.5 px-3 py-2 cursor-pointer transition-colors"
+                            style={{ background: on ? `${TEAL}08` : "white" }}
+                            onClick={e => { e.preventDefault(); toggleFloor(key); }}>
+                            <span className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                              style={{ background: on ? TEAL : "white", borderColor: on ? TEAL : "#e2e8f0" }}>
+                              {on && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                            </span>
+                            <span className="text-sm text-slate-700">{label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                    <div className="px-3 py-2 border-t border-slate-100 bg-slate-50 flex justify-end">
+                      <button onClick={() => setFloorPickerOpen(false)}
+                        className="text-xs font-bold px-4 py-1.5 rounded-lg text-white"
+                        style={{ background: TEAL }}>확인</button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 선택된 층 태그 */}
+            {selectedFloors.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {selectedFloors.map(key => {
+                  const option = FLOOR_OPTIONS.find(f => f.key === key);
+                  return (
+                    <span key={key} className="flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full border"
+                      style={{ borderColor: `${TEAL}40`, background: `${TEAL}0d`, color: TEAL }}>
+                      {option?.label ?? key}
+                      <button onClick={() => toggleFloor(key)} className="hover:text-red-400 transition-colors ml-0.5 leading-none text-teal-400">×</button>
+                    </span>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* 작업내용 */}
@@ -1842,6 +2179,7 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
 
         </div>
       </div>
+      </div>{/* /섹션 1 비활성화 래퍼 */}
 
       {/* ══════ 특별작업 서브폼 (입력방식 토글 포함) ══════ */}
       {workCategory === "special" && safetyWorks.hotWork && (
@@ -1955,9 +2293,12 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       </div>
 
 
+      {/* ══════ 섹션 3: SK서린사옥 위험/유해 요소 ══════ */}
+      <SKRiskSection selectedFloors={selectedFloors} get={get} set={set} />
+
       {/* ══════ 섹션 4: 작업자 안전교육 ══════ */}
       <div className={CARD}>
-        <SectionHeader num={3} title="작업자 안전교육 현황" />
+        <SectionHeader num={4} title="작업자 안전교육 현황" />
         <div className="p-6 space-y-4">
 
           {/* 세이프버디 불러오기 버튼 */}
@@ -1986,9 +2327,6 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
           />
         </div>
       </div>
-
-      </div>{/* /비활성화 래퍼 inner space-y-4 */}
-      </div>{/* /비활성화 래퍼 outer */}
 
       {/* ══════ 작성완료 버튼 ══════ */}
       {get("formCompleted") !== "true" ? (
@@ -2019,7 +2357,7 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
 
       {/* ══════ 섹션 5: 작업 연장 여부 ══════ */}
       <div className={CARD}>
-        <SectionHeader num={4} title="작업 연장 여부" />
+        <SectionHeader num={5} title="작업 연장 여부" />
         <div className="p-6">
           <label className="flex items-center gap-3 cursor-pointer group w-fit">
             <button
@@ -2054,6 +2392,9 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       </div>
 
       {/* ══════ 모달 ══════ */}
+      {floorGuideOpen && (
+        <FloorGuideModal onClose={() => setFloorGuideOpen(false)} />
+      )}
       {sigModal && (
         <SignatureDrawModal
           title={sigModal.label}
