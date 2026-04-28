@@ -558,7 +558,8 @@ const MOCK_SAFEBUDDY_EDU = [
   { id: "edu5", title: "작업허가서 작성 교육", date: "2025-10-15", trainer: "정소장", org: "현장관리팀", content: "작업허가서 작성 절차, 서명 결재 프로세스, 안전조치 확인사항 교육" },
 ];
 
-type EduRow = { type: string; detail: string; date: string; duration: string; instructor: string; count: string };
+type EduCompleter = { name: string; org: string; phone: string };
+type EduRow = { type: string; detail: string; date: string; duration: string; instructor: string; count: string; completers: EduCompleter[] };
 
 function SafeBuddyEduModal({
   onImport,
@@ -623,81 +624,147 @@ function SafeBuddyEduModal({
 const EDU_TYPES = ["정기교육", "신규채용자 교육", "작업내용 변경 시 교육", "특별교육", "기초안전보건교육", "기타"];
 
 function EduTable({
-  rows, onAdd, onRemove, onUpdate,
+  rows, onAdd, onRemove, onUpdate, onAddCompleter, onRemoveCompleter,
 }: {
   rows: EduRow[];
   onAdd: () => void;
   onRemove: (i: number) => void;
   onUpdate: (i: number, key: keyof EduRow, val: string) => void;
+  onAddCompleter: (rowIdx: number, person: EduCompleter) => void;
+  onRemoveCompleter: (rowIdx: number, personIdx: number) => void;
 }) {
-  const COLS = [
-    { key: "type",       label: "교육종류",     w: "140px" },
-    { key: "detail",     label: "교육세부종류",  w: "1fr"   },
-    { key: "date",       label: "교육날짜",     w: "130px" },
-    { key: "duration",   label: "교육시간",     w: "80px"  },
-    { key: "instructor", label: "강사명",       w: "90px"  },
-    { key: "count",      label: "수료자 수",    w: "70px"  },
-  ];
-  const gridCols = `1.5rem ${COLS.map(c => c.w).join(" ")} 1.5rem`;
+  const [staffPickerRow, setStaffPickerRow] = useState<number | null>(null);
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-2">
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
         <span className={GTITLE}>교육 참여 작업자 명단</span>
-        <AddBtn onClick={onAdd} />
+        <AddBtn onClick={onAdd} label="+ 교육 추가" />
       </div>
+
       {rows.length === 0 ? (
         <div className="rounded-xl border-2 border-dashed border-slate-200 py-5 text-center">
-          <p className="text-xs text-slate-400">추가 버튼으로 교육 항목을 입력하세요</p>
+          <p className="text-xs text-slate-400">교육 추가 버튼으로 교육 항목을 입력하세요</p>
         </div>
       ) : (
-        <div className="rounded-xl overflow-hidden border border-slate-200">
-          {/* 헤더 */}
-          <div className="grid text-[10px] font-bold text-slate-500 uppercase tracking-wider px-3 py-2 bg-slate-50"
-            style={{ gridTemplateColumns: gridCols }}>
-            <span>#</span>
-            {COLS.map(c => <span key={c.key}>{c.label}</span>)}
-            <span />
-          </div>
-          {/* 행 */}
+        <div className="space-y-3">
           {rows.map((row, i) => (
-            <div key={i} className="grid items-center px-3 py-1.5 gap-2 border-t border-slate-100 bg-white"
-              style={{ gridTemplateColumns: gridCols }}>
-              <span className="text-[10px] text-slate-400 font-bold">{i + 1}</span>
+            <div key={i} className="rounded-xl border border-slate-200 overflow-hidden bg-white">
+              {/* 교육 정보 행 */}
+              <div className="grid items-center px-3 py-2 gap-2 bg-slate-50/80 border-b border-slate-100"
+                style={{ gridTemplateColumns: "1.5rem 1fr 1fr 110px 70px 80px 1.5rem" }}>
+                <span className="text-[10px] text-slate-400 font-bold">{i + 1}</span>
+                <input className={TINP} value={row.type} placeholder="교육종류"
+                  onChange={e => onUpdate(i, "type", e.target.value)} />
+                <input className={TINP} value={row.detail} placeholder="교육 세부 내용"
+                  onChange={e => onUpdate(i, "detail", e.target.value)} />
+                <input type="date" className={TINP} value={row.date}
+                  onChange={e => onUpdate(i, "date", e.target.value)} />
+                <input className={TINP} value={row.duration} placeholder="1시간"
+                  onChange={e => onUpdate(i, "duration", e.target.value)} />
+                <input className={TINP} value={row.instructor} placeholder="강사명"
+                  onChange={e => onUpdate(i, "instructor", e.target.value)} />
+                <button onClick={() => onRemove(i)}
+                  className="text-slate-300 hover:text-red-400 text-xs transition-colors">✕</button>
+              </div>
 
-              {/* 교육종류 — select */}
-              <select
-                className={TINP + " cursor-pointer"}
-                value={row.type}
-                onChange={e => onUpdate(i, "type", e.target.value)}>
-                <option value="">선택</option>
-                {EDU_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
-              </select>
+              {/* 수료자 목록 */}
+              <div className="px-3 py-2.5 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 flex items-center gap-1.5">
+                    수료자 목록
+                    <span className="px-1.5 py-0.5 rounded-full text-[9px] font-bold"
+                      style={{ background: `${TEAL}15`, color: TEAL }}>
+                      {(row.completers || []).length}명
+                    </span>
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setStaffPickerRow(i)}
+                      className="text-[10px] font-semibold px-2 py-1 rounded border transition-all flex items-center gap-1"
+                      style={{ color: "#6366f1", borderColor: "#6366f140", background: "#6366f108" }}>
+                      👥 불러오기
+                    </button>
+                    <button
+                      onClick={() => onAddCompleter(i, { name: "", org: "", phone: "" })}
+                      className="text-[10px] font-semibold px-2 py-1 rounded border transition-all"
+                      style={{ color: TEAL, borderColor: `${TEAL}40`, background: `${TEAL}08` }}>
+                      + 직접 추가
+                    </button>
+                  </div>
+                </div>
 
-              {/* 교육세부종류 */}
-              <input className={TINP} value={row.detail} placeholder="세부 내용"
-                onChange={e => onUpdate(i, "detail", e.target.value)} />
-
-              {/* 교육날짜 */}
-              <input type="date" className={TINP} value={row.date}
-                onChange={e => onUpdate(i, "date", e.target.value)} />
-
-              {/* 교육시간 */}
-              <input className={TINP} value={row.duration} placeholder="1시간"
-                onChange={e => onUpdate(i, "duration", e.target.value)} />
-
-              {/* 강사명 */}
-              <input className={TINP} value={row.instructor} placeholder="홍길동"
-                onChange={e => onUpdate(i, "instructor", e.target.value)} />
-
-              {/* 수료자 수 */}
-              <input type="number" min={0} className={TINP} value={row.count} placeholder="0"
-                onChange={e => onUpdate(i, "count", e.target.value)} />
-
-              <button onClick={() => onRemove(i)}
-                className="text-slate-300 hover:text-red-400 text-xs transition-colors">✕</button>
+                {(row.completers || []).length === 0 ? (
+                  <p className="text-[10px] text-slate-300 text-center py-1">수료자를 추가하세요</p>
+                ) : (
+                  <div className="space-y-1">
+                    {/* 컬럼 헤더 */}
+                    <div className="grid text-[9px] font-bold text-slate-400 px-1 pb-0.5"
+                      style={{ gridTemplateColumns: "16px 80px 80px 120px 20px", gap: "6px" }}>
+                      <span />
+                      <span>성명</span>
+                      <span>소속</span>
+                      <span>연락처</span>
+                      <span />
+                    </div>
+                    {(row.completers || []).map((c, pi) => {
+                      const ci = "px-2 py-1.5 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 transition-all placeholder:text-slate-300";
+                      const upd = (field: keyof EduCompleter, val: string) => {
+                        const next = (row.completers || []).map((x, xi) => xi === pi ? { ...x, [field]: val } : x);
+                        onUpdate(i, "completers" as keyof EduRow, JSON.stringify(next));
+                      };
+                      return (
+                        <div key={pi} className="grid items-center"
+                          style={{ gridTemplateColumns: "16px 80px 80px 120px 20px", gap: "6px" }}>
+                          <span className="text-[9px] text-slate-300 font-bold text-center">{pi + 1}</span>
+                          <input className={ci} placeholder="성명" value={c.name}
+                            onChange={e => upd("name", e.target.value)} />
+                          <input className={ci} placeholder="소속" value={c.org}
+                            onChange={e => upd("org", e.target.value)} />
+                          <input className={ci} placeholder="010-0000-0000" value={c.phone ?? ""}
+                            onChange={e => upd("phone", e.target.value)} />
+                          <button onClick={() => onRemoveCompleter(i, pi)}
+                            className="text-slate-300 hover:text-red-400 text-xs transition-colors text-center">✕</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           ))}
+        </div>
+      )}
+
+      {/* 직원 목록 피커 (수료자 불러오기) */}
+      {staffPickerRow !== null && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 360 }}>
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+              <span className="text-sm font-bold text-slate-800">👥 수료자 불러오기</span>
+              <button onClick={() => setStaffPickerRow(null)} className="text-slate-400 hover:text-slate-600">✕</button>
+            </div>
+            <p className="px-5 pt-2 text-[10px] text-slate-400">선택하면 수료자 목록에 추가됩니다</p>
+            <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
+              {MOCK_STAFF.map(s => (
+                <button key={s.name}
+                  onClick={() => { onAddCompleter(staffPickerRow, { name: s.name, org: s.dept, phone: s.phone }); }}
+                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-100 text-left hover:bg-slate-50 hover:border-teal-200 transition-all">
+                  <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">{s.name[0]}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800">{s.name}</p>
+                    <p className="text-xs text-slate-400">{s.dept} · {s.phone}</p>
+                  </div>
+                  <span className="text-xs font-semibold px-2 py-1 rounded-lg border border-teal-100 text-teal-600 bg-teal-50">+ 추가</span>
+                </button>
+              ))}
+            </div>
+            <div className="px-5 py-3 border-t border-slate-100">
+              <button onClick={() => setStaffPickerRow(null)}
+                className="w-full py-2 rounded-xl text-sm font-bold text-white"
+                style={{ background: TEAL }}>완료</button>
+            </div>
+          </div>
         </div>
       )}
     </div>
@@ -1110,6 +1177,31 @@ function HotWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: str
           <textarea className={INP + " resize-none"} rows={2} value={get("hw_afterMeasures")} onChange={e => set("hw_afterMeasures", e.target.value)} placeholder="작업 종료 후 취한 안전조치 내용" /></div>
         <div><label className={LBL}>반납 확인</label>
           <input className={INP} value={get("hw_returnConfirm")} onChange={e => set("hw_returnConfirm", e.target.value)} placeholder="반납 확인자 및 일시" /></div>
+        {/* 1-1. 화기작업 관계자 서명 */}
+        <div>
+          <label className={LBL}>관계자 서명</label>
+          <SignaturePanel showTel>
+            <PersonRow label="화재감시자" prefix="ap11_watch" get={get} set={set} showTel />
+            <PersonRow label="소방안전관리자" prefix="ap11_fire" get={get} set={set} showTel />
+            <PersonRow label="시설팀 담당자" prefix="ap11_facility" get={get} set={set} showTel />
+            <PersonRow label="공사담당자" prefix="ap11_construction" get={get} set={set} showTel />
+            <PersonRow label="입주사 담당자" prefix="ap11_tenant" get={get} set={set} showTel />
+            <PersonRow label="작업구역 담당자" prefix="ap11_area" get={get} set={set} showTel />
+            <PersonRow label="화기취급 책임자" prefix="ap11_chief" get={get} set={set} showTel />
+          </SignaturePanel>
+        </div>
+
+        {/* 1-1. 초기대응체계 서명 */}
+        <div>
+          <label className={LBL}>초기대응체계 서명</label>
+          <SignaturePanel showTel>
+            <PersonRow label="현장책임자" prefix="hw_er_chief" get={get} set={set} showTel />
+            <PersonRow label="비상연락" prefix="hw_er_contact" get={get} set={set} showTel />
+            <PersonRow label="초기소화" prefix="hw_er_fire" get={get} set={set} showTel />
+            <PersonRow label="피난유도" prefix="hw_er_evac" get={get} set={set} showTel />
+          </SignaturePanel>
+        </div>
+
         <div>
           <label className={LBL}>허가자 서명</label>
           <SignaturePanel>
@@ -1188,24 +1280,50 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
           <textarea className={INP + " resize-none"} rows={2} value={get("aw_content")} onChange={e => set("aw_content", e.target.value)} placeholder="작업 내용 기입" /></div>
         <div>
           <label className={LBL}>장비 제원</label>
-          <div className="grid grid-cols-5 gap-x-4 gap-y-2 mb-4">
-            {["수직형", "굴절형", "직진붐형", "직진Z형", "궤도형", "지게차", "굴삭기"].map(t => {
-              const on = equipTypes.includes(t);
+          {/* 주요 장비 유형 선택 */}
+          <div className="flex gap-2 mb-3">
+            {([
+              { key: "고소작업대", icon: "🪜" },
+              { key: "지게차",    icon: "🚜" },
+              { key: "굴삭기",    icon: "⛏️" },
+            ] as { key: string; icon: string }[]).map(({ key, icon }) => {
+              const on = get("aw_mainEquipType") === key;
               return (
-                <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none">
-                  <button onClick={() => {
-                    const next = on ? equipTypes.filter(x => x !== t) : [...equipTypes, t];
-                    set("aw_equipTypes", JSON.stringify(next));
+                <button key={key}
+                  onClick={() => {
+                    set("aw_mainEquipType", on ? "" : key);
+                    if (!on) set("aw_equipTypes", "[]");
                   }}
-                    className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
-                    style={{ borderColor: on ? "#d97706" : "#cbd5e1", background: on ? "#d97706" : "white" }}>
-                    {on && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                  </button>
-                  <span className="text-sm text-slate-700">{t}</span>
-                </label>
+                  className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-sm font-semibold transition-all"
+                  style={{ borderColor: on ? "#d97706" : "#e2e8f0", background: on ? "#fffbeb" : "white", color: on ? "#d97706" : "#64748b" }}>
+                  <span>{icon}</span>
+                  <span>{key}</span>
+                </button>
               );
             })}
           </div>
+          {/* 고소작업대 종류 선택 */}
+          {get("aw_mainEquipType") === "고소작업대" && (
+            <div className="grid grid-cols-5 gap-x-4 gap-y-2 mb-4 px-3 py-3 rounded-xl bg-amber-50 border border-amber-100">
+              <p className="col-span-5 text-xs font-bold text-amber-700 mb-0.5">고소작업대 종류</p>
+              {["수직형", "굴절형", "직진붐형", "직진Z형", "궤도형"].map(t => {
+                const on = equipTypes.includes(t);
+                return (
+                  <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <button onClick={() => {
+                      const next = on ? equipTypes.filter(x => x !== t) : [...equipTypes, t];
+                      set("aw_equipTypes", JSON.stringify(next));
+                    }}
+                      className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                      style={{ borderColor: on ? "#d97706" : "#cbd5e1", background: on ? "#d97706" : "white" }}>
+                      {on && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </button>
+                    <span className="text-sm text-slate-700">{t}</span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
           {/* 장비 제원 수치 입력 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -1410,6 +1528,17 @@ function ConfinedSpaceSubForm({ get, set }: { get: (k: string) => string; set: (
         </div>
         <div><label className={LBL}>특별조치사항</label>
           <textarea className={INP + " resize-none"} rows={2} value={get("cs_specialMeasures")} onChange={e => set("cs_specialMeasures", e.target.value)} placeholder="추가 특별조치 사항 기입" /></div>
+        {/* 1-2. 밀폐공간 관계자 서명 */}
+        <div>
+          <label className={LBL}>관계자 서명</label>
+          <SignaturePanel showTel>
+            <PersonRow label="안전관리자" prefix="ap12_safety" get={get} set={set} showTel />
+            <PersonRow label="작업 책임자" prefix="ap12_chief" get={get} set={set} showTel />
+            <PersonRow label="감시자" prefix="ap12_watcher" get={get} set={set} showTel />
+            <PersonRow label="작업자" prefix="ap12_worker" get={get} set={set} showTel />
+          </SignaturePanel>
+        </div>
+
         <div>
           <label className={LBL}>최종 허가자 서명</label>
           <SignaturePanel>
@@ -1417,263 +1546,6 @@ function ConfinedSpaceSubForm({ get, set }: { get: (k: string) => string; set: (
           </SignaturePanel>
         </div>
       </div>
-    </div>
-  );
-}
-
-// ════════════════════════════════════════════════════
-// 비밀/보안준수 서약서 섹션
-// ════════════════════════════════════════════════════
-type PrivacyWorker = { name: string; role: string; sigImg: string };
-
-function PrivacySection({ get, set }: { get: (k: string) => string; set: (k: string, v: string) => void }) {
-  const [sigModal, setSigModal] = useState<string | null>(null); // "chief" | "w_N"
-  const [staffPicker, setStaffPicker] = useState(false);
-
-  const workers: PrivacyWorker[] = (() => { try { return JSON.parse(get("privacy_workers")) || []; } catch { return []; } })();
-  const setWorkers = (w: PrivacyWorker[]) => set("privacy_workers", JSON.stringify(w));
-  const updateWorker = (i: number, key: keyof PrivacyWorker, val: string) => {
-    const next = [...workers]; next[i] = { ...next[i], [key]: val }; setWorkers(next);
-  };
-
-  const handleSigSave = (dataUrl: string) => {
-    if (!sigModal) return;
-    if (sigModal === "chief") { set("privacy_chief_sigImg", dataUrl); }
-    else { const idx = parseInt(sigModal.replace("w_", "")); updateWorker(idx, "sigImg", dataUrl); }
-    setSigModal(null);
-  };
-
-  const handlePrint = () => {
-    const chief = { name: get("privacy_chief_name"), sigImg: get("privacy_chief_sigImg") };
-    const year  = get("privacy_year")  || "____";
-    const month = get("privacy_month") || "__";
-    const day   = get("privacy_day")   || "__";
-    const role  = get("privacy_job_role") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
-
-    const workerPairs: [PrivacyWorker | null, PrivacyWorker | null][] = [];
-    for (let i = 0; i < workers.length; i += 2) {
-      workerPairs.push([workers[i] ?? null, workers[i + 1] ?? null]);
-    }
-
-    const sigBox = (name: string, sigImg: string, label: string) => `
-      <div class="sig-item">
-        <span class="sig-label">${label}</span>
-        <span class="sig-name">${name || '________________'}</span>
-        <span>(서명)</span>
-        ${sigImg ? `<img src="${sigImg}" class="sig-img">` : '<span class="sig-blank"></span>'}
-      </div>`;
-
-    const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
-<title>비밀/보안준수 서약서</title>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: "Malgun Gothic","Noto Sans KR",sans-serif; font-size: 11pt; padding: 18mm 16mm; color: #111; line-height: 1.85; }
-  h1 { text-align: center; font-size: 17pt; margin-bottom: 4px; }
-  h2 { text-align: center; font-size: 12pt; font-weight: normal; margin-bottom: 20px; }
-  p { margin: 8px 0; text-align: justify; }
-  ol { padding-left: 22px; margin: 8px 0; }
-  ol > li { margin: 8px 0; }
-  .sub-list { list-style: none; padding-left: 12px; margin: 6px 0; }
-  .sub-list li { margin: 4px 0; }
-  .date { text-align: center; margin: 24px 0 20px; font-size: 12pt; letter-spacing: 2px; }
-  .addr { margin: 8px 0; }
-  .addr span { display: inline-block; border-bottom: 1px solid #333; min-width: 220px; }
-  .sig-section { margin-top: 16px; }
-  .sig-item { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
-  .sig-label { min-width: 90px; color: #444; font-size: 10pt; }
-  .sig-name { min-width: 80px; font-weight: 600; }
-  .sig-img { height: 38px; object-fit: contain; border-bottom: 1px solid #333; min-width: 80px; }
-  .sig-blank { display: inline-block; min-width: 80px; border-bottom: 1px solid #333; height: 38px; }
-  .worker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-top: 6px; padding-left: 8px; }
-  .footer { margin-top: 36px; text-align: right; font-size: 12pt; font-weight: bold; }
-  @media print { @page { margin: 15mm 12mm; size: A4; } }
-</style>
-</head><body>
-  <h1>비밀/보안준수 서약서</h1>
-  <h2>(협력업체用)</h2>
-  <p>본인은 SK서린사옥과 관련된 CHM이 위탁한 업무(이하 "위탁업무")를 추진하는 <u>${role}</u>/작업자로서 ${year}년&nbsp;${month}월&nbsp;${day}일 부로 수행함에 있어 CHM에 대하여 다음 각호의 사항을 보장하고 해당 작업책임자는 서약 내용에 대해 각 각의 작업자에 대하여도 동일하게 적용됨을 책임지고 관리할 것을 서약합니다.</p>
-  <ol>
-    <li>위탁업무를 수행하면서 CHM으로부터 제공받거나 인지하게 된 SK서린사옥의 각종 기술적 정보와 자료(이하 "기밀사항")는 SK서린사옥의 고유재산에 속하는 것임을 인식하고 이를 비밀로서 취급하며, 위탁업무 수행 종료 시에는 기밀사항에 관련되는 제반 정보와 자료 또는 그 등사본 일체를 계약종료 즉시 CHM에 반환한다.</li>
-    <li>본인이 보안준수 서약서 각호의 어느 하나라도 위반하는 경우에는 용역계약 해지를 포함한 본인(또는 본인이 속한 회사)에 대한 어떠한 불이익 처분도 이를 감수하고 본인이 보안준수 서약 위반의 결과로 얻은 이익전부를 CHM에 반환하고 당사가 입은 손해를 배상한다.</li>
-    <li>작업공간 내에서는 아래의 내용을 반드시 준수해야 하며 이의 위반 시 작업중지 및 퇴실조치를 받을 수 있습니다.
-      <ul class="sub-list">
-        <li>가. 작업이 허용된 공사구역 外 어떠한 경우라도 감독자의 승인 없이 돌아다니는 행위</li>
-        <li>나. 건물 내에서 흡연을 하는 행위 (흡연은 외부 흡연공간 활용)</li>
-        <li>다. 작업자가 SK서린사옥 구성원의 개인물품, 사무실 비품, 탕비실 내 차, 음료를 손대는 행위</li>
-        <li>라. 작업 중 발생한 쓰레기는 반드시 처리하되 방치 및 은닉을 하는 행위</li>
-      </ul>
-    </li>
-  </ol>
-  <p style="margin-top:16px;">상기 보안규정을 준수할 것을 서약하며, 그 증거로서 본 서약서를 작성제출합니다.</p>
-  <div class="date">${year}년&nbsp;&nbsp;&nbsp;${month}월&nbsp;&nbsp;&nbsp;${day}일</div>
-  <div class="sig-section">
-    <p class="addr">주소: <span>&nbsp;</span></p>
-    ${sigBox(chief.name, chief.sigImg, "현장소장 이름")}
-    <div style="margin-top:12px;"><span style="font-size:10pt;color:#444;">동작업자 이름</span>
-      <div class="worker-grid">
-        ${workers.map((w, i) => sigBox(w.name, w.sigImg, `근로자${i + 1}`)).join("")}
-      </div>
-    </div>
-  </div>
-  <div class="footer">㈜씨에이치엠 귀중</div>
-  <script>window.onload=function(){window.print();}</script>
-</body></html>`;
-
-    const win = window.open("", "_blank", "width=900,height=1100");
-    if (win) { win.document.write(html); win.document.close(); }
-  };
-
-  const tinp = "px-2 py-1.5 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 transition-all placeholder:text-slate-300 w-full";
-
-  return (
-    <div className="border-t border-slate-100 bg-slate-50/50">
-      {/* 헤더 툴바 */}
-      <div className="flex items-center justify-between px-4 py-2.5">
-        <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wide">서약 대상자</span>
-        <div className="flex items-center gap-1.5">
-          <button onClick={() => setStaffPicker(true)}
-            className="text-[10px] font-semibold px-2 py-1 rounded border transition-all"
-            style={{ color: "#6366f1", borderColor: "#6366f140", background: "#6366f108" }}>
-            📋 목록 불러오기
-          </button>
-          <button onClick={() => setWorkers([...workers, { name: "", role: "", sigImg: "" }])}
-            className="text-[10px] font-semibold px-2 py-1 rounded border transition-all"
-            style={{ color: TEAL, borderColor: `${TEAL}40`, background: `${TEAL}08` }}>
-            + 추가
-          </button>
-          <button onClick={handlePrint}
-            className="text-[10px] font-semibold px-2 py-1 rounded border transition-all"
-            style={{ color: "#b91c1c", borderColor: "#b91c1c40", background: "#b91c1c08" }}>
-            🖨 서약서 인쇄
-          </button>
-        </div>
-      </div>
-
-      <div className="px-4 pb-4 space-y-2.5">
-        {/* 날짜 + 직종 */}
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="flex items-center gap-1">
-            <input className="w-14 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 text-center"
-              placeholder="년" value={get("privacy_year")} onChange={e => set("privacy_year", e.target.value)} />
-            <span className="text-xs text-slate-500">년</span>
-            <input className="w-10 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 text-center"
-              placeholder="월" value={get("privacy_month")} onChange={e => set("privacy_month", e.target.value)} />
-            <span className="text-xs text-slate-500">월</span>
-            <input className="w-10 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 text-center"
-              placeholder="일" value={get("privacy_day")} onChange={e => set("privacy_day", e.target.value)} />
-            <span className="text-xs text-slate-500">일</span>
-          </div>
-          <input className="flex-1 min-w-24 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 placeholder:text-slate-300"
-            placeholder="직책 / 직종" value={get("privacy_job_role")} onChange={e => set("privacy_job_role", e.target.value)} />
-        </div>
-
-        {/* 현장소장 */}
-        <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-          <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100">
-            <span className="text-[10px] font-bold text-slate-500">현장소장</span>
-          </div>
-          <div className="flex items-center gap-2 px-3 py-2">
-            <input className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 placeholder:text-slate-300"
-              placeholder="성명" value={get("privacy_chief_name")} onChange={e => set("privacy_chief_name", e.target.value)} />
-            <div className="flex-shrink-0">
-              {get("privacy_chief_sigImg") ? (
-                <div className="relative group">
-                  <img src={get("privacy_chief_sigImg")} alt="서명" className="h-7 w-20 object-contain rounded border border-slate-200 bg-white" />
-                  <button onClick={() => setSigModal("chief")}
-                    className="absolute inset-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold text-white"
-                    style={{ background: "rgba(0,0,0,0.4)" }}>재서명</button>
-                </div>
-              ) : (
-                <button onClick={() => setSigModal("chief")}
-                  className="text-[10px] font-semibold px-2 py-1 rounded border border-dashed transition-all hover:border-teal-400 hover:text-teal-500"
-                  style={{ borderColor: "#e2e8f0", color: "#94a3b8" }}>✍️ 서명</button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 작업자 목록 */}
-        {workers.length > 0 && (
-          <div className="rounded-lg border border-slate-200 bg-white overflow-hidden">
-            <div className="px-3 py-1.5 bg-slate-50 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-[10px] font-bold text-slate-500">작업자 목록 ({workers.length}명)</span>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {workers.map((w, i) => (
-                <div key={i} className="flex items-center gap-2 px-3 py-2">
-                  <span className="text-[10px] font-bold text-slate-300 w-4 flex-shrink-0">{i + 1}</span>
-                  <input className="flex-1 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 placeholder:text-slate-300"
-                    placeholder="성명" value={w.name} onChange={e => updateWorker(i, "name", e.target.value)} />
-                  <input className="w-20 px-2 py-1 border border-slate-200 rounded text-xs bg-white outline-none focus:border-teal-400 placeholder:text-slate-300"
-                    placeholder="직종" value={w.role} onChange={e => updateWorker(i, "role", e.target.value)} />
-                  <div className="flex-shrink-0">
-                    {w.sigImg ? (
-                      <div className="relative group">
-                        <img src={w.sigImg} alt="서명" className="h-7 w-16 object-contain rounded border border-slate-200 bg-white" />
-                        <button onClick={() => setSigModal(`w_${i}`)}
-                          className="absolute inset-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold text-white"
-                          style={{ background: "rgba(0,0,0,0.4)" }}>재서명</button>
-                      </div>
-                    ) : (
-                      <button onClick={() => setSigModal(`w_${i}`)}
-                        className="text-[10px] font-semibold px-2 py-1 rounded border border-dashed transition-all hover:border-teal-400 hover:text-teal-500"
-                        style={{ borderColor: "#e2e8f0", color: "#94a3b8" }}>✍️ 서명</button>
-                    )}
-                  </div>
-                  <button onClick={() => setWorkers(workers.filter((_, j) => j !== i))}
-                    className="text-slate-300 hover:text-red-400 text-xs transition-colors flex-shrink-0">✕</button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {workers.length === 0 && (
-          <div className="rounded-lg border-2 border-dashed border-slate-200 py-4 text-center">
-            <p className="text-xs text-slate-400">+ 추가 또는 📋 목록 불러오기로 작업자를 등록하세요</p>
-          </div>
-        )}
-      </div>
-
-      {/* 직원 목록 피커 */}
-      {staffPicker && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: "rgba(0,0,0,0.45)" }}>
-          <div className="bg-white rounded-2xl shadow-2xl overflow-hidden" style={{ width: 360 }}>
-            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
-              <span className="text-sm font-bold text-slate-800">📋 직원 목록에서 추가</span>
-              <button onClick={() => setStaffPicker(false)} className="text-slate-400 hover:text-slate-600">✕</button>
-            </div>
-            <div className="p-4 space-y-2 max-h-64 overflow-y-auto">
-              {MOCK_STAFF.map(s => (
-                <button key={s.name}
-                  onClick={() => setWorkers([...workers, { name: s.name, role: s.dept, sigImg: "" }])}
-                  className="w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border border-slate-100 text-left hover:bg-slate-50 hover:border-teal-200 transition-all">
-                  <span className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-xs font-bold text-slate-600 flex-shrink-0">{s.name[0]}</span>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{s.name}</p>
-                    <p className="text-xs text-slate-400">{s.dept} · {s.phone}</p>
-                  </div>
-                  <span className="text-xs font-semibold px-2 py-1 rounded-lg border border-teal-100 text-teal-600 bg-teal-50">+ 추가</span>
-                </button>
-              ))}
-            </div>
-            <div className="px-5 py-3 border-t border-slate-100">
-              <button onClick={() => setStaffPicker(false)}
-                className="w-full py-2 rounded-xl text-sm font-bold text-white"
-                style={{ background: TEAL }}>완료</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* 서명 캔버스 모달 */}
-      {sigModal && (
-        <SignatureDrawModal
-          title={sigModal === "chief" ? "현장소장 서명" : `작업자 ${parseInt(sigModal.replace("w_", "")) + 1} 서명`}
-          onSave={handleSigSave}
-          onClose={() => setSigModal(null)}
-        />
-      )}
     </div>
   );
 }
@@ -1814,13 +1686,13 @@ function SKRiskSection({
   selectedFloors,
   get,
   set,
+  subforms,
 }: {
   selectedFloors: string[];
   get: (k: string) => string;
   set: (k: string, v: string) => void;
+  subforms?: React.ReactNode;
 }) {
-  const [sigModal, setSigModal] = useState(false);
-
   const riskChecked: Record<string, boolean> = (() => {
     try { return JSON.parse(get("skRiskChecked")) || {}; } catch { return {}; }
   })();
@@ -1838,12 +1710,24 @@ function SKRiskSection({
     s.hazards.flatMap(h => h.items.map(item => `${s.floorKey}::${item}`))
   );
   const checkedCount = allItemKeys.filter(k => riskChecked[k]).length;
-  const sigImg = get("skRiskSignature");
 
   return (
     <div className={SK_RISK_CARD}>
-      <SectionHeader num={3} title="SK서린사옥 위험/유해 요소" badge={selectedFloors.length > 0 ? `확인 ${checkedCount} / ${allItemKeys.length}` : undefined} />
+      <SectionHeader num={2} title="추가정보 입력/확인" badge={selectedFloors.length > 0 ? `확인 ${checkedCount} / ${allItemKeys.length}` : undefined} />
       <div className="p-6 space-y-4">
+        {subforms && (
+          <div className="space-y-3 pb-2 border-b border-slate-100">
+            {subforms}
+          </div>
+        )}
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-xs font-bold text-slate-600">SK서린사옥 층별 위험/유해 요소 안내</span>
+          {selectedFloors.length > 0 && (
+            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-400">
+              {selectedFloors.length}개 층 선택됨
+            </span>
+          )}
+        </div>
         {selectedFloors.length === 0 ? (
           <div className="flex items-center justify-center px-4 py-8 rounded-xl border-2 border-dashed border-slate-200">
             <p className="text-sm text-slate-400 text-center">작업 개요에서 작업 층수를 선택하면<br />해당 층의 위험/유해 요소가 표시됩니다</p>
@@ -1886,47 +1770,7 @@ function SKRiskSection({
           </div>
         )}
 
-        {/* 확인자 서명 */}
-        <div>
-          <label className={LBL}>확인자 서명</label>
-          <div className="rounded-xl border border-slate-100 bg-slate-50/60 px-5 py-4 space-y-3">
-            <div className="grid text-[10px] font-bold text-slate-400 uppercase tracking-wider pb-1 border-b border-slate-200 ml-[4.25rem] gap-2 grid-cols-3">
-              <span>소속</span><span>성명</span><span>서명</span>
-            </div>
-            <div className="flex items-center gap-3 min-w-0">
-              <span className="text-xs font-semibold text-slate-500 w-14 flex-shrink-0 text-right">확인자</span>
-              <div className="flex-1 grid gap-2 grid-cols-3">
-                <input className={TINP} placeholder="소속" value={get("skRisk_confirmer_org")} onChange={e => set("skRisk_confirmer_org", e.target.value)} />
-                <input className={TINP} placeholder="성명" value={get("skRisk_confirmer_name")} onChange={e => set("skRisk_confirmer_name", e.target.value)} />
-                <div>
-                  {sigImg ? (
-                    <div className="relative group h-8">
-                      <img src={sigImg} alt="서명" className="h-8 w-full object-contain rounded border border-slate-200 bg-white px-1" />
-                      <button onClick={() => setSigModal(true)}
-                        className="absolute inset-0 flex items-center justify-center rounded opacity-0 group-hover:opacity-100 transition-opacity text-[9px] font-bold text-white"
-                        style={{ background: "rgba(0,0,0,0.4)" }}>재서명</button>
-                    </div>
-                  ) : (
-                    <button onClick={() => setSigModal(true)}
-                      className="w-full flex items-center justify-center gap-1 py-1.5 rounded border border-dashed text-[10px] font-semibold transition-all hover:border-teal-400 hover:text-teal-500"
-                      style={{ borderColor: "#e2e8f0", color: "#94a3b8" }}>
-                      ✍️ 서명
-                    </button>
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
       </div>
-
-      {sigModal && (
-        <SignatureDrawModal
-          title="확인자 서명"
-          onSave={v => { set("skRiskSignature", v); setSigModal(false); }}
-          onClose={() => setSigModal(false)}
-        />
-      )}
     </div>
   );
 }
@@ -1981,11 +1825,11 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const [safeBuddyModal, setSafeBuddyModal] = useState(false);
 
   const WORK_TYPES = [
-    { key: "hotWork",       label: "발화(화기)", icon: "🔥", color: "#dc2626", bg: "#fff1f2" },
-    { key: "confinedSpace", label: "밀폐",        icon: "🚪", color: "#1d4ed8", bg: "#eff6ff" },
+    { key: "hotWork",       label: "화기작업",        icon: "🔥", color: "#dc2626", bg: "#fff1f2" },
+    { key: "confinedSpace", label: "밀폐공간작업",    icon: "🚪", color: "#1d4ed8", bg: "#eff6ff" },
     { key: "heightWork",    label: "중량물/장비취급", icon: "🏗️", color: "#d97706", bg: "#fffbeb" },
-    { key: "crane",         label: "크레인",      icon: "🏋️", color: "#7c3aed", bg: "#f5f3ff" },
-    { key: "electrical",    label: "전기",        icon: "⚡", color: "#0369a1", bg: "#f0f9ff" },
+    { key: "crane",         label: "고소작업",        icon: "🪜", color: "#7c3aed", bg: "#f5f3ff" },
+    { key: "electrical",    label: "전기작업",        icon: "⚡", color: "#0369a1", bg: "#f0f9ff" },
   ];
 
   const startDay = getDayKo(permit.startDate);
@@ -2204,35 +2048,42 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       </div>
       </div>{/* /섹션 1 비활성화 래퍼 */}
 
-      {/* ══════ 특별작업 서브폼 (입력방식 토글 포함) ══════ */}
-      {workCategory === "special" && safetyWorks.hotWork && (
-        <div className="space-y-2">
-          <SubFormModeToggle modeKey="hotWork_mode" label="화기작업" icon="🔥" color="#dc2626" get={get} set={set} />
-          {(get("hotWork_mode") || "form") === "form"
-            ? <HotWorkSubForm get={get} set={set} />
-            : <PdfUploadBlock label="화기작업" icon="🔥" color="#dc2626" bg="#fef2f2" storeKey="hotWork" get={get} set={set} />}
-        </div>
-      )}
-      {workCategory === "special" && safetyWorks.confinedSpace && (
-        <div className="space-y-2">
-          <SubFormModeToggle modeKey="confinedSpace_mode" label="밀폐공간" icon="🚪" color="#1d4ed8" get={get} set={set} />
-          {(get("confinedSpace_mode") || "form") === "form"
-            ? <ConfinedSpaceSubForm get={get} set={set} />
-            : <PdfUploadBlock label="밀폐공간" icon="🚪" color="#1d4ed8" bg="#eff6ff" storeKey="confinedSpace" get={get} set={set} />}
-        </div>
-      )}
-      {workCategory === "special" && safetyWorks.heightWork && (
-        <div className="space-y-2">
-          <SubFormModeToggle modeKey="heightWork_mode" label="중량물/장비취급" icon="🏗️" color="#d97706" get={get} set={set} />
-          {(get("heightWork_mode") || "form") === "form"
-            ? <HeightWorkSubForm get={get} set={set} />
-            : <PdfUploadBlock label="중량물/장비취급" icon="🏗️" color="#d97706" bg="#fffbeb" storeKey="heightWork" get={get} set={set} />}
-        </div>
-      )}
+      {/* ══════ 섹션 2: 추가정보 입력/확인 ══════ */}
+      <SKRiskSection selectedFloors={selectedFloors} get={get} set={set}
+        subforms={workCategory === "special" ? (
+          <>
+            {safetyWorks.hotWork && (
+              <div className="space-y-2">
+                <SubFormModeToggle modeKey="hotWork_mode" label="화기작업" icon="🔥" color="#dc2626" get={get} set={set} />
+                {(get("hotWork_mode") || "form") === "form"
+                  ? <HotWorkSubForm get={get} set={set} />
+                  : <PdfUploadBlock label="화기작업" icon="🔥" color="#dc2626" bg="#fef2f2" storeKey="hotWork" get={get} set={set} />}
+              </div>
+            )}
+            {safetyWorks.confinedSpace && (
+              <div className="space-y-2">
+                <SubFormModeToggle modeKey="confinedSpace_mode" label="밀폐공간" icon="🚪" color="#1d4ed8" get={get} set={set} />
+                {(get("confinedSpace_mode") || "form") === "form"
+                  ? <ConfinedSpaceSubForm get={get} set={set} />
+                  : <PdfUploadBlock label="밀폐공간" icon="🚪" color="#1d4ed8" bg="#eff6ff" storeKey="confinedSpace" get={get} set={set} />}
+              </div>
+            )}
+            {safetyWorks.heightWork && (
+              <div className="space-y-2">
+                <SubFormModeToggle modeKey="heightWork_mode" label="중량물/장비취급" icon="🏗️" color="#d97706" get={get} set={set} />
+                {(get("heightWork_mode") || "form") === "form"
+                  ? <HeightWorkSubForm get={get} set={set} />
+                  : <PdfUploadBlock label="중량물/장비취급" icon="🏗️" color="#d97706" bg="#fffbeb" storeKey="heightWork" get={get} set={set} />}
+              </div>
+            )}
+          </>
+        ) : undefined}
+      />
 
-      {/* ══════ 섹션 2: 작업허가 승인 전 안전조치 확인 ══════ */}
+
+      {/* ══════ 섹션 3: 작업허가 승인 전 안전조치 확인 ══════ */}
       <div className={CARD}>
-        <SectionHeader num={2} title="작업허가 승인 전 안전조치 확인"
+        <SectionHeader num={3} title="작업허가 승인 전 안전조치 확인"
           badge={`확인 ${checklistDone} / ${SAFETY_CHECKLIST.length}`} />
         <div className="p-6 space-y-4">
 
@@ -2259,9 +2110,6 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
                         {on && <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
                       </button>
                     </label>
-
-                    {/* 비밀/보안 서약서 섹션 */}
-                    {item.key === "privacy" && <PrivacySection get={get} set={set} />}
 
                     {/* PPE 서브 체크박스 */}
                     {item.isPPE && (
@@ -2315,10 +2163,6 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
         </div>
       </div>
 
-
-      {/* ══════ 섹션 3: SK서린사옥 위험/유해 요소 ══════ */}
-      <SKRiskSection selectedFloors={selectedFloors} get={get} set={set} />
-
       {/* ══════ 섹션 4: 작업자 안전교육 ══════ */}
       <div className={CARD}>
         <SectionHeader num={4} title="작업자 안전교육 현황" />
@@ -2344,9 +2188,29 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
 
           <EduTable
             rows={eduRows}
-            onAdd={() => setEdu([...eduRows, { type: "", detail: "", date: "", duration: "", instructor: "", count: "" }])}
+            onAdd={() => setEdu([...eduRows, { type: "", detail: "", date: "", duration: "", instructor: "", count: "0", completers: [] }])}
             onRemove={i => setEdu(eduRows.filter((_, j) => j !== i))}
-            onUpdate={(i, k, v) => { const n = [...eduRows]; n[i] = { ...n[i], [k]: v }; setEdu(n); }}
+            onUpdate={(i, k, v) => {
+              const n = [...eduRows];
+              if (k === "completers") {
+                n[i] = { ...n[i], completers: JSON.parse(v), count: String(JSON.parse(v).length) };
+              } else {
+                n[i] = { ...n[i], [k]: v };
+              }
+              setEdu(n);
+            }}
+            onAddCompleter={(i, person) => {
+              const n = [...eduRows];
+              const cs = [...(n[i].completers || []), person];
+              n[i] = { ...n[i], completers: cs, count: String(cs.length) };
+              setEdu(n);
+            }}
+            onRemoveCompleter={(i, pi) => {
+              const n = [...eduRows];
+              const cs = (n[i].completers || []).filter((_, j) => j !== pi);
+              n[i] = { ...n[i], completers: cs, count: String(cs.length) };
+              setEdu(n);
+            }}
           />
         </div>
       </div>

@@ -545,6 +545,87 @@ function SectionHeader({ icon, title, badge }: { icon: string; title: string; ba
   );
 }
 
+// ── 서약서 인쇄 ───────────────────────────────────────────
+function printPrivacyForm(permit: WorkPermit) {
+  const sp = permit.specifics ?? {};
+  const g = (k: string) => (sp[`chm_${k}`] ?? "") as string;
+
+  type W = { name: string; role: string; sigImg: string };
+  const workers: W[] = (() => { try { return JSON.parse(g("privacy_workers")) || []; } catch { return []; } })();
+  const chief = { name: g("privacy_chief_name"), sigImg: g("privacy_chief_sigImg") };
+  const year  = g("privacy_year")  || "____";
+  const month = g("privacy_month") || "__";
+  const day   = g("privacy_day")   || "__";
+  const role  = g("privacy_job_role") || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+
+  const sigBox = (name: string, sigImg: string, label: string) => `
+    <div class="sig-item">
+      <span class="sig-label">${label}</span>
+      <span class="sig-name">${name || "________________"}</span>
+      <span>(서명)</span>
+      ${sigImg ? `<img src="${sigImg}" class="sig-img">` : '<span class="sig-blank"></span>'}
+    </div>`;
+
+  const html = `<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8">
+<title>비밀/보안준수 서약서</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: "Malgun Gothic","Noto Sans KR",sans-serif; font-size: 11pt; padding: 18mm 16mm; color: #111; line-height: 1.85; }
+  h1 { text-align: center; font-size: 17pt; margin-bottom: 4px; }
+  h2 { text-align: center; font-size: 12pt; font-weight: normal; margin-bottom: 20px; }
+  p { margin: 8px 0; text-align: justify; }
+  ol { padding-left: 22px; margin: 8px 0; }
+  ol > li { margin: 8px 0; }
+  .sub-list { list-style: none; padding-left: 12px; margin: 6px 0; }
+  .sub-list li { margin: 4px 0; }
+  .date { text-align: center; margin: 24px 0 20px; font-size: 12pt; letter-spacing: 2px; }
+  .addr { margin: 8px 0; }
+  .addr span { display: inline-block; border-bottom: 1px solid #333; min-width: 220px; }
+  .sig-section { margin-top: 16px; }
+  .sig-item { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+  .sig-label { min-width: 90px; color: #444; font-size: 10pt; }
+  .sig-name { min-width: 80px; font-weight: 600; }
+  .sig-img { height: 38px; object-fit: contain; border-bottom: 1px solid #333; min-width: 80px; }
+  .sig-blank { display: inline-block; min-width: 80px; border-bottom: 1px solid #333; height: 38px; }
+  .worker-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 24px; margin-top: 6px; padding-left: 8px; }
+  .footer { margin-top: 36px; text-align: right; font-size: 12pt; font-weight: bold; }
+  @media print { @page { margin: 15mm 12mm; size: A4; } }
+</style>
+</head><body>
+  <h1>비밀/보안준수 서약서</h1>
+  <h2>(협력업체用)</h2>
+  <p>본인은 SK서린사옥과 관련된 CHM이 위탁한 업무(이하 "위탁업무")를 추진하는 <u>${role}</u>/작업자로서 ${year}년&nbsp;${month}월&nbsp;${day}일 부로 수행함에 있어 CHM에 대하여 다음 각호의 사항을 보장하고 해당 작업책임자는 서약 내용에 대해 각 각의 작업자에 대하여도 동일하게 적용됨을 책임지고 관리할 것을 서약합니다.</p>
+  <ol>
+    <li>위탁업무를 수행하면서 CHM으로부터 제공받거나 인지하게 된 SK서린사옥의 각종 기술적 정보와 자료(이하 "기밀사항")는 SK서린사옥의 고유재산에 속하는 것임을 인식하고 이를 비밀로서 취급하며, 위탁업무 수행 종료 시에는 기밀사항에 관련되는 제반 정보와 자료 또는 그 등사본 일체를 계약종료 즉시 CHM에 반환한다.</li>
+    <li>본인이 보안준수 서약서 각호의 어느 하나라도 위반하는 경우에는 용역계약 해지를 포함한 본인(또는 본인이 속한 회사)에 대한 어떠한 불이익 처분도 이를 감수하고 본인이 보안준수 서약 위반의 결과로 얻은 이익전부를 CHM에 반환하고 당사가 입은 손해를 배상한다.</li>
+    <li>작업공간 내에서는 아래의 내용을 반드시 준수해야 하며 이의 위반 시 작업중지 및 퇴실조치를 받을 수 있습니다.
+      <ul class="sub-list">
+        <li>가. 작업이 허용된 공사구역 外 어떠한 경우라도 감독자의 승인 없이 돌아다니는 행위</li>
+        <li>나. 건물 내에서 흡연을 하는 행위 (흡연은 외부 흡연공간 활용)</li>
+        <li>다. 작업자가 SK서린사옥 구성원의 개인물품, 사무실 비품, 탕비실 내 차, 음료를 손대는 행위</li>
+        <li>라. 작업 중 발생한 쓰레기는 반드시 처리하되 방치 및 은닉을 하는 행위</li>
+      </ul>
+    </li>
+  </ol>
+  <p style="margin-top:16px;">상기 보안규정을 준수할 것을 서약하며, 그 증거로서 본 서약서를 작성제출합니다.</p>
+  <div class="date">${year}년&nbsp;&nbsp;&nbsp;${month}월&nbsp;&nbsp;&nbsp;${day}일</div>
+  <div class="sig-section">
+    <p class="addr">주소: <span>&nbsp;</span></p>
+    ${sigBox(chief.name, chief.sigImg, "현장소장 이름")}
+    <div style="margin-top:12px;"><span style="font-size:10pt;color:#444;">동작업자 이름</span>
+      <div class="worker-grid">
+        ${workers.map((w: W, i: number) => sigBox(w.name, w.sigImg, `근로자${i + 1}`)).join("")}
+      </div>
+    </div>
+  </div>
+  <div class="footer">㈜씨에이치엠 귀중</div>
+  <script>window.onload=function(){window.print();}</script>
+</body></html>`;
+
+  const win = window.open("", "_blank", "width=900,height=1100");
+  if (win) { win.document.write(html); win.document.close(); }
+}
+
 // ── 작업허가서 인쇄 ───────────────────────────────────────────
 function printPermitForm(permit: WorkPermit) {
   const sp = permit.specifics ?? {};
@@ -557,6 +638,22 @@ function printPermitForm(permit: WorkPermit) {
   const workerRows: { name: string; org: string }[] =
     (() => { try { return JSON.parse(g("hw_workerRows")) || []; } catch { return []; } })();
   const hwWorkTypes: string[] = (() => { try { return JSON.parse(g("hw_workTypes")) || []; } catch { return []; } })();
+
+  // 서약서 데이터
+  type PW = { name: string; role: string; sigImg: string };
+  const privacyWorkers: PW[] = (() => { try { return JSON.parse(g("privacy_workers") as string) || []; } catch { return []; } })();
+  const privacyChief = { name: g("privacy_chief_name") as string, sigImg: g("privacy_chief_sigImg") as string };
+  const privacyYear  = (g("privacy_year")     as string) || "____";
+  const privacyMonth = (g("privacy_month")    as string) || "__";
+  const privacyDay   = (g("privacy_day")      as string) || "__";
+  const privacyRole  = (g("privacy_job_role") as string) || "&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;";
+  const privacySigBox = (name: string, sigImg: string, label: string) => `
+    <div style="display:flex;align-items:center;gap:12px;margin:8px 0;">
+      <span style="min-width:90px;color:#444;font-size:10pt;">${label}</span>
+      <span style="min-width:80px;font-weight:600;">${name || "________________"}</span>
+      <span>(서명)</span>
+      ${sigImg ? `<img src="${sigImg}" style="height:38px;object-fit:contain;border-bottom:1px solid #333;min-width:80px;">` : '<span style="display:inline-block;min-width:80px;border-bottom:1px solid #333;height:38px;"></span>'}
+    </div>`;
 
   const isHot      = !!sw.hotWork;
   const isConfined = !!sw.confinedSpace;
@@ -658,7 +755,7 @@ function printPermitForm(permit: WorkPermit) {
     ]},
   ];
 
-  const safetySubTypes = ["hotWork:발화(화기)", "confinedSpace:밀폐", "heightWork:고소", "crane:크레인", "electrical:전기"];
+  const safetySubTypes = ["hotWork:화기작업", "confinedSpace:밀폐공간작업", "heightWork:중량물/장비취급", "crane:고소작업", "electrical:전기작업"];
   const workTypeSectionHtml = () => {
     const chk = (active: boolean) => `<span style="font-size:12pt;">${active ? "☑" : "☐"}</span>`;
     const subLine = safetySubTypes.map(s => {
@@ -1033,10 +1130,15 @@ ${isHeight ? `
   <tr><td colspan="4" style="background:#f0f0f0;font-weight:bold;font-size:8pt;">나. 장비 제원</td></tr>
   <tr>
     <td class="th-label">장비 종류</td>
-    <td colspan="3">${["수직형","굴절형","직진붐형","직진Z형","궤도형"].map(t => {
-      const sel = (g("aw_equipType") || "").includes(t);
-      return `${sel ? "☑" : "☐"} ${t}`;
-    }).join("&nbsp;&nbsp;")}</td>
+    <td colspan="3">${(() => {
+      const main = g("aw_mainEquipType") || "";
+      if (main === "고소작업대") {
+        const subs = (() => { try { return JSON.parse(g("aw_equipTypes")) || []; } catch { return []; } })();
+        const subStr = ["수직형","굴절형","직진붐형","직진Z형","궤도형"].map(t => `${subs.includes(t) ? "☑" : "☐"} ${t}`).join("&nbsp;&nbsp;");
+        return `☑ 고소작업대 ☐ 지게차 ☐ 굴삭기<br/><span style="font-size:8pt;color:#666;">&nbsp;&nbsp;&nbsp;종류: ${subStr}</span>`;
+      }
+      return `${main === "고소작업대" ? "☑" : "☐"} 고소작업대&nbsp;&nbsp;${main === "지게차" ? "☑" : "☐"} 지게차&nbsp;&nbsp;${main === "굴삭기" ? "☑" : "☐"} 굴삭기`;
+    })()}</td>
   </tr>
   <tr>
     <td class="th-label">자체 중량</td>
@@ -1173,6 +1275,38 @@ ${isConfined ? `
   </tr>
 </table>
 ` : ""}
+
+<!-- ══ 다음 페이지: 비밀/보안준수 서약서 ══ -->
+<div style="page-break-before:always;padding:18mm 16mm;font-family:'Malgun Gothic','Noto Sans KR',sans-serif;font-size:11pt;color:#111;line-height:1.85;">
+  <h1 style="text-align:center;font-size:17pt;margin:0 0 4px;">비밀/보안준수 서약서</h1>
+  <h2 style="text-align:center;font-size:12pt;font-weight:normal;margin:0 0 20px;">(협력업체用)</h2>
+  <p style="margin:8px 0;text-align:justify;">본인은 SK서린사옥과 관련된 CHM이 위탁한 업무(이하 "위탁업무")를 추진하는 <u>${privacyRole}</u>/작업자로서 ${privacyYear}년&nbsp;${privacyMonth}월&nbsp;${privacyDay}일 부로 수행함에 있어 CHM에 대하여 다음 각호의 사항을 보장하고 해당 작업책임자는 서약 내용에 대해 각 각의 작업자에 대하여도 동일하게 적용됨을 책임지고 관리할 것을 서약합니다.</p>
+  <ol style="padding-left:22px;margin:8px 0;">
+    <li style="margin:8px 0;">위탁업무를 수행하면서 CHM으로부터 제공받거나 인지하게 된 SK서린사옥의 각종 기술적 정보와 자료(이하 "기밀사항")는 SK서린사옥의 고유재산에 속하는 것임을 인식하고 이를 비밀로서 취급하며, 위탁업무 수행 종료 시에는 기밀사항에 관련되는 제반 정보와 자료 또는 그 등사본 일체를 계약종료 즉시 CHM에 반환한다.</li>
+    <li style="margin:8px 0;">본인이 보안준수 서약서 각호의 어느 하나라도 위반하는 경우에는 용역계약 해지를 포함한 본인(또는 본인이 속한 회사)에 대한 어떠한 불이익 처분도 이를 감수하고 본인이 보안준수 서약 위반의 결과로 얻은 이익전부를 CHM에 반환하고 당사가 입은 손해를 배상한다.</li>
+    <li style="margin:8px 0;">작업공간 내에서는 아래의 내용을 반드시 준수해야 하며 이의 위반 시 작업중지 및 퇴실조치를 받을 수 있습니다.
+      <ul style="list-style:none;padding-left:12px;margin:6px 0;">
+        <li style="margin:4px 0;">가. 작업이 허용된 공사구역 外 어떠한 경우라도 감독자의 승인 없이 돌아다니는 행위</li>
+        <li style="margin:4px 0;">나. 건물 내에서 흡연을 하는 행위 (흡연은 외부 흡연공간 활용)</li>
+        <li style="margin:4px 0;">다. 작업자가 SK서린사옥 구성원의 개인물품, 사무실 비품, 탕비실 내 차, 음료를 손대는 행위</li>
+        <li style="margin:4px 0;">라. 작업 중 발생한 쓰레기는 반드시 처리하되 방치 및 은닉을 하는 행위</li>
+      </ul>
+    </li>
+  </ol>
+  <p style="margin-top:16px;text-align:justify;">상기 보안규정을 준수할 것을 서약하며, 그 증거로서 본 서약서를 작성제출합니다.</p>
+  <div style="text-align:center;margin:24px 0 20px;font-size:12pt;letter-spacing:2px;">${privacyYear}년&nbsp;&nbsp;&nbsp;${privacyMonth}월&nbsp;&nbsp;&nbsp;${privacyDay}일</div>
+  <div style="margin-top:16px;">
+    <p style="margin:8px 0;">주소: <span style="display:inline-block;border-bottom:1px solid #333;min-width:220px;">&nbsp;</span></p>
+    ${privacySigBox(privacyChief.name, privacyChief.sigImg, "현장소장 이름")}
+    <div style="margin-top:12px;">
+      <span style="font-size:10pt;color:#444;">동작업자 이름</span>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px 24px;margin-top:6px;padding-left:8px;">
+        ${privacyWorkers.map((w: {name:string;sigImg:string}, i: number) => privacySigBox(w.name, w.sigImg, `근로자${i + 1}`)).join("")}
+      </div>
+    </div>
+  </div>
+  <div style="margin-top:36px;text-align:right;font-size:12pt;font-weight:bold;">㈜씨에이치엠 귀중</div>
+</div>
 
 </body>
 </html>`;
@@ -1566,33 +1700,16 @@ function ApprovalSidePanel({ permit }: { permit: WorkPermit }) {
                   {SigRow("ap1_client", "입주사 관리자")}
                   {SigRow("ap1_contractor", "시공사 안전관리자(작업감독자)")}
 
-                  {/* 1-1. 화기작업 서브단계 */}
+                  {/* 1-1/1-2 서명은 본문 서브폼에서 진행 */}
                   {isHotWork && (
-                    <SubBlock icon="🔥" label="1-1. 화기작업 서명" color="#b91c1c" bg="#fef2f2">
-                      {SigRow("ap11_watch", "화재감시자")}
-                      {SigRow("ap11_fire", "소방안전관리자")}
-                      {SigRow("ap11_facility", "시설팀 담당자")}
-                      {SigRow("ap11_construction", "공사담당자")}
-                      {SigRow("ap11_tenant", "입주사 관리 담당자")}
-                      {SigRow("ap11_area", "작업구역 담당자")}
-                      {SigRow("ap11_chief", "화기취급 책임자")}
-                      <div className="border-t border-red-100 my-1" />
-                      <p className="text-[10px] font-bold text-red-700 px-1">초기대응체계</p>
-                      {SigRow("hw_er_chief", "현장책임자")}
-                      {SigRow("hw_er_contact", "비상연락")}
-                      {SigRow("hw_er_fire", "초기소화")}
-                      {SigRow("hw_er_evac", "피난유도")}
-                    </SubBlock>
+                    <div className="rounded-xl border border-red-100 bg-red-50/50 px-3 py-2 text-[10px] text-red-500">
+                      🔥 화기작업 관계자 서명은 본문 화기취급작업 허가서 내에서 진행하세요
+                    </div>
                   )}
-
-                  {/* 1-2. 밀폐공간 서브단계 */}
                   {isConfinedSpace && (
-                    <SubBlock icon="🚪" label="1-2. 밀폐공간 작업 서명" color="#1d4ed8" bg="#eff6ff">
-                      {SigRow("ap12_safety", "안전관리자")}
-                      {SigRow("ap12_chief", "밀폐공간 작업 책임자")}
-                      {SigRow("ap12_watcher", "밀폐공간 감시자")}
-                      {SigRow("ap12_worker", "밀폐공간 작업자")}
-                    </SubBlock>
+                    <div className="rounded-xl border border-blue-100 bg-blue-50/50 px-3 py-2 text-[10px] text-blue-500">
+                      🚪 밀폐공간 관계자 서명은 본문 밀폐공간 안전작업 허가서 내에서 진행하세요
+                    </div>
                   )}
 
                   {/* 1-3. 고소작업 서브단계 */}
@@ -1953,7 +2070,7 @@ function PermitDetail({ permit, onClose, mode = "modal" }: { permit: WorkPermit;
               onClick={() => printPermitForm(permit)}
               className="text-xs px-3 py-1.5 rounded-xl border font-medium transition-all hover:opacity-80"
               style={{ borderColor: "#e2e8f0", color: "#475569" }}
-              title="허가서 인쇄"
+              title="허가서 + 서약서 인쇄"
             >
               🖨️ 인쇄
             </button>
