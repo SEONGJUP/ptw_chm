@@ -1,9 +1,9 @@
 "use client";
 import React, { useCallback, useState, useRef } from "react";
-import { useRouter } from "next/navigation";
 import { WorkPermit } from "@/store/workPermitStore";
 import { useWorkPermitStore } from "@/store/workPermitStore";
 import { useApprovalStore } from "@/store/approvalStore";
+import { ApprovalSection } from "@/components/work-permit/ApprovalSection";
 
 // ════════════════════════════════════════════════════
 // 체크리스트 상수
@@ -1783,7 +1783,6 @@ function SKRiskSection({
 export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const { updatePermit } = useWorkPermitStore();
   const { initDocument, document: approvalDoc } = useApprovalStore();
-  const router = useRouter();
 
   const get = useCallback((k: string): string => (permit.specifics ?? {})[`chm_${k}`] ?? "", [permit.specifics]);
   const set = useCallback((k: string, v: string) => {
@@ -2228,7 +2227,10 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
               if (!approvalDoc) {
                 initDocument();
               }
-              router.push("/permit-approval");
+              // 아래 서명 섹션으로 스크롤
+              setTimeout(() => {
+                document.getElementById("approval-section")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }, 100);
             }}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
             style={{ background: "#00B7AF" }}
@@ -2241,7 +2243,7 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
         <div className="flex items-center justify-between px-1">
           <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5">
             <span className="w-5 h-5 rounded-full bg-emerald-100 flex items-center justify-center text-emerald-600 text-[10px]">✓</span>
-            작성완료 — 우측에서 서명 결재가 진행됩니다
+            작성완료 — 아래에서 서명 및 결재가 진행됩니다
           </span>
           <button
             onClick={() => set("formCompleted", "false")}
@@ -2287,6 +2289,13 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
           )}
         </div>
       </div>
+
+      {/* ══════ 서명 및 결재 프로세스 (작성완료 후 인라인) ══════ */}
+      {get("formCompleted") === "true" && (
+        <div id="approval-section" className="px-1">
+          <ApprovalSection />
+        </div>
+      )}
 
       {/* ══════ 모달 ══════ */}
       {floorGuideOpen && (
