@@ -1,7 +1,9 @@
 "use client";
 import React, { useCallback, useState, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { WorkPermit } from "@/store/workPermitStore";
 import { useWorkPermitStore } from "@/store/workPermitStore";
+import { useApprovalStore } from "@/store/approvalStore";
 
 // ════════════════════════════════════════════════════
 // 체크리스트 상수
@@ -1780,6 +1782,8 @@ function SKRiskSection({
 // ════════════════════════════════════════════════════
 export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
   const { updatePermit } = useWorkPermitStore();
+  const { initDocument, document: approvalDoc } = useApprovalStore();
+  const router = useRouter();
 
   const get = useCallback((k: string): string => (permit.specifics ?? {})[`chm_${k}`] ?? "", [permit.specifics]);
   const set = useCallback((k: string, v: string) => {
@@ -2219,7 +2223,13 @@ export function CHMPermitForm({ permit }: { permit: WorkPermit }) {
       {get("formCompleted") !== "true" ? (
         <div className="flex justify-end px-1">
           <button
-            onClick={() => set("formCompleted", "true")}
+            onClick={() => {
+              set("formCompleted", "true");
+              if (!approvalDoc) {
+                initDocument();
+              }
+              router.push("/permit-approval");
+            }}
             className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white shadow-lg transition-all hover:opacity-90 active:scale-95"
             style={{ background: "#00B7AF" }}
           >
