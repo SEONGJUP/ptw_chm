@@ -16,6 +16,7 @@ import {
   SignatureRecord,
   NotificationLog,
   ExtensionRequest,
+  PermitDocument,
 } from "@/store/approvalStore";
 
 // ─── 상수 ────────────────────────────────────────────────────────────────────
@@ -717,14 +718,14 @@ function useToast() {
   return { showToast, ToastEl };
 }
 
-// ─── 서명 표시 ───────────────────────────────────────────────────────────────
+// ─── 인라인 서명 안내 ────────────────────────────────────────────────────────
 
-function SignatureDisplay({ sig }: { sig: SignatureRecord | undefined }) {
-  if (!sig) return <div className="h-12 border border-dashed border-slate-200 rounded-lg flex items-center justify-center text-xs text-slate-300">미서명</div>;
+function InlineSignPrompt({ message = "아래 서명란에서 서명해 주세요" }: { message?: string }) {
   return (
-    <div className="space-y-0.5">
-      <img src={sig.signatureDataUrl} alt="서명" className="h-12 border rounded-lg bg-slate-50 object-contain w-full" />
-      <p className="text-[10px] text-slate-400">{sig.signerName} · {new Date(sig.signedAt).toLocaleString("ko-KR")}</p>
+    <div className="flex items-center gap-2 mt-2 p-2.5 bg-teal-50 rounded-lg border border-teal-200 text-teal-700 text-xs font-semibold">
+      <span>✍️</span>
+      <span className="flex-1">{message}</span>
+      <span className="text-base leading-none">↓</span>
     </div>
   );
 }
@@ -737,11 +738,10 @@ interface StepCardProps {
   person?: string;
   status: "done" | "active" | "pending" | "skipped";
   signedAt?: string;
-  signature?: SignatureRecord;
   children?: React.ReactNode;
 }
 
-function StepCard({ stepNum, title, person, status, signedAt, signature, children }: StepCardProps) {
+function StepCard({ stepNum, title, person, status, signedAt, children }: StepCardProps) {
   const colors = {
     done: "border-green-300 bg-green-50",
     active: "border-teal-400 bg-teal-50",
@@ -769,12 +769,187 @@ function StepCard({ stepNum, title, person, status, signedAt, signature, childre
           </div>
           {person && <p className="text-xs text-slate-500 mt-0.5">{person}</p>}
           {signedAt && <p className="text-[10px] text-slate-400 mt-0.5">{new Date(signedAt).toLocaleString("ko-KR")}</p>}
-          {signature && (
-            <div className="mt-2">
-              <img src={signature.signatureDataUrl} alt="서명" className="h-10 border rounded bg-white object-contain" />
-            </div>
-          )}
           {children && <div className="mt-2">{children}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── 서명 박스 (서명란 개별 칸) ──────────────────────────────────────────────
+
+interface SignatureBoxProps {
+  label: string;
+  sublabel?: string;
+  signatureRecord?: SignatureRecord;
+  canSign: boolean;
+  onSign: () => void;
+  actionLabel?: string;
+}
+
+function SignatureBox({ label, sublabel, signatureRecord, canSign, onSign, actionLabel = "서명하기" }: SignatureBoxProps) {
+  return (
+    <div className="flex flex-col flex-shrink-0 w-[118px]">
+      <div className="bg-slate-700 text-white text-[11px] font-semibold text-center py-1.5 rounded-t-lg px-1 truncate">
+        {label}
+      </div>
+      {sublabel && (
+        <div className="text-[10px] text-slate-500 text-center py-1 bg-slate-50 border-x border-slate-200 truncate px-1">
+          {sublabel}
+        </div>
+      )}
+      <div
+        className={`flex-1 border-2 border-t-0 rounded-b-lg p-2 flex flex-col items-center justify-center min-h-[88px] ${
+          canSign ? "border-teal-400 bg-teal-50 cursor-pointer hover:bg-teal-100 transition" : "border-slate-200 bg-white"
+        }`}
+        onClick={canSign && !signatureRecord ? onSign : undefined}
+      >
+        {signatureRecord ? (
+          <>
+            <img src={signatureRecord.signatureDataUrl} alt="서명" className="h-11 w-full object-contain" />
+            <p className="text-[9px] text-slate-500 mt-1 truncate w-full text-center">{signatureRecord.signerName}</p>
+            <p className="text-[9px] text-slate-300 truncate w-full text-center">
+              {new Date(signatureRecord.signedAt).toLocaleDateString("ko-KR")}
+            </p>
+          </>
+        ) : canSign ? (
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-teal-500 text-lg">✍️</span>
+            <span className="text-[11px] text-teal-700 font-semibold">{actionLabel}</span>
+          </div>
+        ) : (
+          <p className="text-[10px] text-slate-300">미서명</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─── 서명란 (하단 가로 배치) ────────────────────────────────────────────────
+
+interface SignatureLaneProps {
+  doc: PermitDocument;
+  currentRole: UserRole;
+  onSign: (key: string) => void;
+  onOpenCompletion: () => void;
+}
+
+function SignatureLane({ doc, currentRole, onSign, onOpenCompletion }: SignatureLaneProps) {
+  const sigByCode = (code: string) => doc.signatures.find((s) => s.stepCode === code);
+  const s = doc.status;
+
+  const approvalBoxes = [
+    {
+      key: s === "REJECTED" ? "resubmit" : "contractor",
+      stepCode: "CONTRACTOR_SIGN",
+      label: "시공사",
+      sublabel: doc.contractorSafetyManagerName,
+      canSign: currentRole === "CONTRACTOR_SAFETY_MANAGER" && (s === "READY_TO_SUBMIT" || s === "REJECTED"),
+      actionLabel: s === "REJECTED" ? "재서명" : "서명하기",
+    },
+    {
+      key: "tenant",
+      stepCode: "TENANT_SIGN",
+      label: "입주사 관리자",
+      sublabel: doc.tenantManager?.name ?? "미지정",
+      canSign: currentRole === "TENANT_MANAGER" && s === "TENANT_MANAGER_REVIEW",
+      actionLabel: "서명하기",
+    },
+    {
+      key: "safety",
+      stepCode: "SAFETY_OFFICER_SIGN",
+      label: "안전담당자",
+      sublabel: doc.safetyOfficer?.name ?? "미지정",
+      canSign:
+        currentRole === "SAFETY_OFFICER" &&
+        (s === "SAFETY_SHE_REVIEW" || s === "SAFETY_SHE_PARTIAL_SIGNED") &&
+        !doc.safetyOfficerSigned,
+      actionLabel: "서명하기",
+    },
+    {
+      key: "she",
+      stepCode: "SHE_MANAGER_SIGN",
+      label: "SHE 관리원",
+      sublabel: doc.sheManager?.name ?? "미지정",
+      canSign:
+        currentRole === "SHE_MANAGER" &&
+        (s === "SAFETY_SHE_REVIEW" || s === "SAFETY_SHE_PARTIAL_SIGNED") &&
+        !doc.sheManagerSigned,
+      actionLabel: "서명하기",
+    },
+    {
+      key: "facilityApprove",
+      stepCode: "FACILITY_MANAGER_APPROVE",
+      label: "관리소장",
+      sublabel: "오소장",
+      canSign: currentRole === "FACILITY_MANAGER" && s === "FACILITY_MANAGER_FINAL_REVIEW",
+      actionLabel: "승인 서명",
+    },
+  ];
+
+  const completionBoxes = [
+    {
+      key: "contractor_completion_modal",
+      stepCode: "CONTRACTOR_COMPLETION_SIGN",
+      label: "시공사 완료",
+      sublabel: doc.contractorSafetyManagerName,
+      canSign: currentRole === "CONTRACTOR_SAFETY_MANAGER" && (s === "APPROVED" || s === "EXTENSION_APPROVED"),
+      isModal: true,
+      actionLabel: "완료 확인",
+    },
+    {
+      key: "controlRoomComplete",
+      stepCode: "CONTROL_ROOM_COMPLETION_SIGN",
+      label: "통제실 완료",
+      sublabel: "박통제",
+      canSign: currentRole === "CONTROL_ROOM" && s === "CONTRACTOR_COMPLETION_SIGNED",
+      isModal: false,
+      actionLabel: "서명하기",
+    },
+  ];
+
+  return (
+    <div className="mt-4 bg-white border-2 border-slate-300 rounded-xl overflow-hidden">
+      <div className="px-4 py-2.5 bg-slate-800 flex items-center gap-2">
+        <span className="text-white text-xs font-bold uppercase tracking-wider">서명란</span>
+        <span className="text-slate-400 text-[10px]">서명 가능한 칸을 클릭하여 서명하세요</span>
+      </div>
+
+      <div className="p-3 space-y-4">
+        {/* 승인 서명 그룹 */}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">승인 서명</p>
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {approvalBoxes.map((box) => (
+              <SignatureBox
+                key={box.key}
+                label={box.label}
+                sublabel={box.sublabel}
+                signatureRecord={sigByCode(box.stepCode)}
+                canSign={box.canSign}
+                onSign={() => onSign(box.key)}
+                actionLabel={box.actionLabel}
+              />
+            ))}
+          </div>
+        </div>
+
+        {/* 작업완료 서명 그룹 */}
+        <div>
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">작업완료 서명</p>
+          <div className="flex gap-2">
+            {completionBoxes.map((box) => (
+              <SignatureBox
+                key={box.key}
+                label={box.label}
+                sublabel={box.sublabel}
+                signatureRecord={sigByCode(box.stepCode)}
+                canSign={box.canSign}
+                onSign={() => box.isModal ? onOpenCompletion() : onSign(box.key)}
+                actionLabel={box.actionLabel}
+              />
+            ))}
+          </div>
         </div>
       </div>
     </div>
@@ -892,521 +1067,156 @@ function PrintPreview() {
 
 function NotificationPanel({ notifications, currentRole }: { notifications: NotificationLog[]; currentRole: UserRole }) {
   const [filterRole, setFilterRole] = useState<UserRole | "ALL">("ALL");
+  const [collapsed, setCollapsed] = useState(true);
   const filtered = filterRole === "ALL" ? notifications : notifications.filter((n) => n.recipientRole === filterRole);
   const sorted = [...filtered].reverse();
+  const unreadCount = notifications.filter((n) => !n.read).length;
 
   return (
-    <div className="mt-4">
-      <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-sm font-bold text-slate-700">알림 로그</h3>
-        <span className="text-xs text-slate-400">({notifications.filter((n) => !n.read).length} 미확인)</span>
-      </div>
-      <div className="flex gap-1 mb-3 flex-wrap">
-        <button onClick={() => setFilterRole("ALL")} className={`px-2 py-0.5 text-xs rounded-full transition ${filterRole === "ALL" ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>전체</button>
-        {ALL_ROLES.map((r) => (
-          <button key={r} onClick={() => setFilterRole(r)} className={`px-2 py-0.5 text-xs rounded-full transition ${filterRole === r ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
-            {ROLE_LABELS[r].split("(")[0].trim()}
-          </button>
-        ))}
-      </div>
-      <div className="space-y-2 max-h-72 overflow-y-auto">
-        {sorted.length === 0 ? (
-          <p className="text-xs text-slate-400 py-4 text-center">알림이 없습니다.</p>
-        ) : (
-          sorted.map((n) => (
-            <div key={n.id} className={`p-2.5 rounded-lg border text-xs ${n.read ? "border-slate-100 bg-white text-slate-500" : "border-teal-200 bg-teal-50 text-slate-700"}`}>
-              <div className="flex items-center justify-between mb-0.5">
-                <span className="font-semibold">{n.title}</span>
-                <span className="text-slate-400 text-[10px]">{new Date(n.createdAt).toLocaleString("ko-KR")}</span>
-              </div>
-              <p className="text-slate-600">{n.message}</p>
-              <p className="text-slate-400 mt-0.5">수신: {n.recipientName}</p>
-            </div>
-          ))
+    <div className="mt-2 bg-white border border-slate-200 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setCollapsed((v) => !v)}
+        className="w-full flex items-center gap-2 px-4 py-3 text-left hover:bg-slate-50 transition"
+      >
+        <span className="text-xs font-bold text-slate-600">알림 로그</span>
+        {unreadCount > 0 && (
+          <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-teal-100 text-teal-700 font-bold">{unreadCount} 미확인</span>
         )}
-      </div>
+        <span className="ml-auto text-slate-400 text-xs">{collapsed ? "▼" : "▲"}</span>
+      </button>
+      {!collapsed && (
+        <div className="px-4 pb-4">
+          <div className="flex gap-1 mb-3 flex-wrap">
+            <button onClick={() => setFilterRole("ALL")} className={`px-2 py-0.5 text-xs rounded-full transition ${filterRole === "ALL" ? "bg-slate-700 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>전체</button>
+            {ALL_ROLES.map((r) => (
+              <button key={r} onClick={() => setFilterRole(r)} className={`px-2 py-0.5 text-xs rounded-full transition ${filterRole === r ? "bg-teal-600 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}>
+                {ROLE_LABELS[r].split("(")[0].trim()}
+              </button>
+            ))}
+          </div>
+          <div className="space-y-2 max-h-72 overflow-y-auto">
+            {sorted.length === 0 ? (
+              <p className="text-xs text-slate-400 py-4 text-center">알림이 없습니다.</p>
+            ) : (
+              sorted.map((n) => (
+                <div key={n.id} className={`p-2.5 rounded-lg border text-xs ${n.read ? "border-slate-100 bg-white text-slate-500" : "border-teal-200 bg-teal-50 text-slate-700"}`}>
+                  <div className="flex items-center justify-between mb-0.5">
+                    <span className="font-semibold">{n.title}</span>
+                    <span className="text-slate-400 text-[10px]">{new Date(n.createdAt).toLocaleString("ko-KR")}</span>
+                  </div>
+                  <p className="text-slate-600">{n.message}</p>
+                  <p className="text-slate-400 mt-0.5">수신: {n.recipientName}</p>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ─── 우측 액션 패널 ──────────────────────────────────────────────────────────
+// ─── 타임라인 ────────────────────────────────────────────────────────────────
 
-interface ActionPanelProps {
+interface TimelineProps {
   showToast: (msg: string, type?: "success" | "error" | "info") => void;
+  onSign: (key: string) => void;
+  setShowExtensionModal: (v: boolean) => void;
+  setShowCompletionModal: (v: boolean) => void;
 }
 
-function ActionPanel({ showToast }: ActionPanelProps) {
+function Timeline({ showToast, onSign, setShowExtensionModal, setShowCompletionModal }: TimelineProps) {
   const {
     document,
     currentRole,
-    contractorSign,
     controlRoomAssignTenant,
-    tenantSign,
     facilityStaffConfirm,
     assignSafetyAndShe,
-    safetyOfficerSign,
-    sheManagerSign,
-    facilityManagerApprove,
     facilityManagerReject,
-    resubmitAfterReject,
-    requestExtension,
-    approveExtension,
-    rejectExtension,
-    contractorCompleteWork,
-    controlRoomCompleteSign,
     facilityManagerFinalComplete,
+    rejectExtension,
   } = useApprovalStore();
 
-  const [showSignPad, setShowSignPad] = useState<string | null>(null); // key for which sign
-  const [showExtensionModal, setShowExtensionModal] = useState(false);
-  const [showCompletionModal, setShowCompletionModal] = useState(false);
-  const [rejectReason, setRejectReason] = useState("");
   const [showRejectInput, setShowRejectInput] = useState(false);
-  const [extRejectReason, setExtRejectReason] = useState("");
+  const [rejectReason, setRejectReason] = useState("");
   const [showExtRejectInput, setShowExtRejectInput] = useState(false);
+  const [extRejectReason, setExtRejectReason] = useState("");
 
-  if (!document) return <div className="text-sm text-slate-400 p-4">문서가 없습니다.</div>;
-
-  const status = document.status;
-  const isLocked = document.isLocked;
-
-  function handleSign(key: string, action: (sig: string) => void) {
-    setShowSignPad(key);
-    return (sig: string) => {
-      action(sig);
-      showToast("서명이 완료되었습니다.", "success");
-    };
-  }
-
-  // 서명 모달 핸들러 생성
-  const signActions: Record<string, (sig: string) => void> = {
-    contractor: contractorSign,
-    resubmit: resubmitAfterReject,
-    tenant: tenantSign,
-    safety: safetyOfficerSign,
-    she: sheManagerSign,
-    facilityApprove: facilityManagerApprove,
-    controlRoomComplete: controlRoomCompleteSign,
-    extensionApprove: approveExtension,
-  };
-
-  function openSign(key: string) {
-    setShowSignPad(key);
-  }
-
-  function onSignSave(sig: string) {
-    if (!showSignPad) return;
-    const action = signActions[showSignPad];
-    if (action) {
-      action(sig);
-      showToast("서명이 완료되었습니다.", "success");
-    }
-    setShowSignPad(null);
-  }
-
-  // 서명 모달
-  if (showSignPad) {
-    const titles: Record<string, string> = {
-      contractor: "시공사 안전관리자 서명",
-      resubmit: "재제출 서명",
-      tenant: "입주사 관리자 확인 서명",
-      safety: "안전담당자 확인 서명",
-      she: "SHE 관리원 확인 서명",
-      facilityApprove: "관리소장 최종 승인 서명",
-      controlRoomComplete: "통제실 완료확인 서명",
-      extensionApprove: "연장 승인 서명",
-    };
-    return (
-      <SignaturePad
-        title={titles[showSignPad] ?? "서명"}
-        onSave={onSignSave}
-        onCancel={() => setShowSignPad(null)}
-      />
-    );
-  }
-
-  // 연장 모달
-  if (showExtensionModal) {
-    return (
-      <ExtensionModal
-        originalEndAt={document.extendedWorkEndAt ?? document.workEndAt}
-        requestedBy={document.contractorSafetyManagerName}
-        onSubmit={(data) => {
-          requestExtension(data);
-          setShowExtensionModal(false);
-          showToast("연장 요청이 제출되었습니다.", "info");
-        }}
-        onCancel={() => setShowExtensionModal(false)}
-      />
-    );
-  }
-
-  // 완료 모달
-  if (showCompletionModal) {
-    return (
-      <CompletionModal
-        onSubmit={(data) => {
-          contractorCompleteWork(data);
-          setShowCompletionModal(false);
-          showToast("작업완료 확인이 제출되었습니다.", "success");
-        }}
-        onCancel={() => setShowCompletionModal(false)}
-      />
-    );
-  }
-
-  // ── CONTRACTOR_SAFETY_MANAGER 액션 ──
-  if (currentRole === "CONTRACTOR_SAFETY_MANAGER") {
-    if (status === "READY_TO_SUBMIT") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">작업허가서 작성이 완료되었습니다. 서명 후 제출하세요.</p>
-          <button onClick={() => openSign("contractor")} disabled={isLocked} className="w-full py-3 rounded-xl bg-teal-600 text-white font-bold text-sm hover:bg-teal-700 transition disabled:opacity-40">
-            작성완료 및 서명진행
-          </button>
-        </div>
-      );
-    }
-    if (status === "REJECTED") {
-      return (
-        <div className="space-y-3">
-          <div className="p-3 rounded-xl bg-red-50 border border-red-200">
-            <p className="text-xs font-semibold text-red-700 mb-1">반려 사유</p>
-            <p className="text-sm text-red-600">{document.rejectionReason}</p>
-          </div>
-          <button onClick={() => openSign("resubmit")} disabled={isLocked} className="w-full py-3 rounded-xl bg-orange-600 text-white font-bold text-sm hover:bg-orange-700 transition disabled:opacity-40">
-            재작성 완료 및 서명진행
-          </button>
-        </div>
-      );
-    }
-    if (status === "APPROVED" || status === "EXTENSION_APPROVED") {
-      return (
-        <div className="space-y-3">
-          <div className="p-3 rounded-xl bg-green-50 border border-green-200">
-            <p className="text-xs font-semibold text-green-700">작업허가서가 승인되었습니다.</p>
-          </div>
-          <button onClick={() => setShowExtensionModal(true)} className="w-full py-2.5 rounded-xl bg-orange-100 text-orange-700 font-semibold text-sm hover:bg-orange-200 transition">
-            작업 연장 요청
-          </button>
-          <button onClick={() => setShowCompletionModal(true)} className="w-full py-2.5 rounded-xl bg-teal-600 text-white font-semibold text-sm hover:bg-teal-700 transition">
-            작업 완료 확인
-          </button>
-        </div>
-      );
-    }
-    if (status === "EXTENSION_REQUESTED") {
-      return (
-        <div className="p-3 rounded-xl bg-orange-50 border border-orange-200 text-sm text-orange-700">
-          연장 승인 대기중입니다.
-        </div>
-      );
-    }
-    if (status === "CONTRACTOR_COMPLETION_SIGNED") {
-      return <div className="p-3 rounded-xl bg-blue-50 border border-blue-200 text-sm text-blue-700">통제실 완료확인 대기중입니다.</div>;
-    }
-    if (status === "LOCKED") {
-      return <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-sm text-purple-700">문서가 잠금되었습니다. 모든 프로세스가 완료되었습니다.</div>;
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── CONTROL_ROOM 액션 ──
-  if (currentRole === "CONTROL_ROOM") {
-    if (status === "CONTRACTOR_SIGNED") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-slate-700">입주사 관리자 지정</p>
-          <TenantAssignForm
-            onAssign={(person) => {
-              controlRoomAssignTenant(person);
-              showToast("입주사 관리자가 지정되었습니다.", "success");
-            }}
-          />
-        </div>
-      );
-    }
-    if (status === "CONTRACTOR_COMPLETION_SIGNED") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">시공사 완료 확인이 제출되었습니다. 통제실 확인 서명을 진행하세요.</p>
-          <button onClick={() => openSign("controlRoomComplete")} className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition">
-            통제실 완료확인 서명
-          </button>
-        </div>
-      );
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── TENANT_MANAGER 액션 ──
-  if (currentRole === "TENANT_MANAGER") {
-    if (status === "TENANT_MANAGER_REVIEW") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">입주사 관리자로서 작업허가서를 확인하고 서명하세요.</p>
-          {document.tenantManager && (
-            <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
-              지정 담당자: {document.tenantManager.name} ({document.tenantManager.company})
-            </div>
-          )}
-          <button onClick={() => openSign("tenant")} className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition">
-            확인 및 서명
-          </button>
-        </div>
-      );
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── FACILITY_STAFF 액션 ──
-  if (currentRole === "FACILITY_STAFF") {
-    if (status === "FACILITY_STAFF_REVIEW") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm font-semibold text-slate-700">관리소 직원 확인 및 담당자 지정</p>
-          <SafetySheForm
-            currentRole={currentRole}
-            document={document}
-            onConfirmStaff={(person) => {
-              facilityStaffConfirm(person);
-              showToast("실무 담당자로 확인되었습니다.", "info");
-            }}
-            onAssign={(safety, she) => {
-              assignSafetyAndShe(safety, she);
-              showToast("안전/SHE 담당자가 지정되었습니다.", "success");
-            }}
-          />
-        </div>
-      );
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── SAFETY_OFFICER 액션 ──
-  if (currentRole === "SAFETY_OFFICER") {
-    if (status === "SAFETY_SHE_REVIEW" || status === "SAFETY_SHE_PARTIAL_SIGNED") {
-      if (document.safetyOfficerSigned) {
-        return (
-          <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700">
-            안전담당자 서명 완료. SHE 관리원 서명 대기중입니다.
-          </div>
-        );
-      }
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">안전담당자로서 작업허가서를 검토하고 서명하세요.</p>
-          {document.safetyOfficer && (
-            <div className="p-2.5 rounded-lg bg-blue-50 border border-blue-200 text-xs text-blue-700">
-              지정 담당자: {document.safetyOfficer.name} ({document.safetyOfficer.department})
-            </div>
-          )}
-          <button onClick={() => openSign("safety")} className="w-full py-3 rounded-xl bg-blue-600 text-white font-bold text-sm hover:bg-blue-700 transition">
-            안전담당자 서명
-          </button>
-        </div>
-      );
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── SHE_MANAGER 액션 ──
-  if (currentRole === "SHE_MANAGER") {
-    if (status === "SAFETY_SHE_REVIEW" || status === "SAFETY_SHE_PARTIAL_SIGNED") {
-      if (document.sheManagerSigned) {
-        return (
-          <div className="p-3 rounded-xl bg-green-50 border border-green-200 text-sm text-green-700">
-            SHE 관리원 서명 완료. 안전담당자 서명 대기중입니다.
-          </div>
-        );
-      }
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">SHE 관리원으로서 작업허가서를 검토하고 서명하세요.</p>
-          {document.sheManager && (
-            <div className="p-2.5 rounded-lg bg-purple-50 border border-purple-200 text-xs text-purple-700">
-              지정 담당자: {document.sheManager.name} ({document.sheManager.department})
-            </div>
-          )}
-          <button onClick={() => openSign("she")} className="w-full py-3 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 transition">
-            SHE 관리원 서명
-          </button>
-        </div>
-      );
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  // ── FACILITY_MANAGER 액션 ──
-  if (currentRole === "FACILITY_MANAGER") {
-    if (status === "FACILITY_MANAGER_FINAL_REVIEW") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">모든 검토가 완료되었습니다. 최종 승인 또는 반려를 진행하세요.</p>
-          <button onClick={() => openSign("facilityApprove")} className="w-full py-3 rounded-xl bg-green-600 text-white font-bold text-sm hover:bg-green-700 transition">
-            최종 승인 및 서명
-          </button>
-          {!showRejectInput ? (
-            <button onClick={() => setShowRejectInput(true)} className="w-full py-2.5 rounded-xl bg-red-100 text-red-700 font-semibold text-sm hover:bg-red-200 transition">
-              반려
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <textarea
-                value={rejectReason}
-                onChange={(e) => setRejectReason(e.target.value)}
-                rows={3}
-                placeholder="반려 사유를 입력하세요"
-                className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
-              />
-              <div className="flex gap-2">
-                <button onClick={() => setShowRejectInput(false)} className="flex-1 py-2 rounded-lg bg-slate-100 text-slate-600 text-sm hover:bg-slate-200 transition">취소</button>
-                <button
-                  onClick={() => {
-                    if (!rejectReason) return;
-                    facilityManagerReject(rejectReason);
-                    setRejectReason("");
-                    setShowRejectInput(false);
-                    showToast("반려 처리되었습니다.", "error");
-                  }}
-                  disabled={!rejectReason}
-                  className="flex-1 py-2 rounded-lg bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition disabled:opacity-40"
-                >
-                  반려 확정
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-    if (status === "EXTENSION_REQUESTED") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">연장 요청이 접수되었습니다.</p>
-          {document.extensionRequests.filter((e) => e.status === "PENDING").map((ext) => (
-            <div key={ext.id} className="p-3 rounded-lg bg-orange-50 border border-orange-200 text-xs space-y-1">
-              <p className="font-semibold text-orange-700">연장 요청 내용</p>
-              <p className="text-slate-600">요청 종료: {ext.requestedEndAt}</p>
-              <p className="text-slate-600">사유: {ext.reason}</p>
-              {ext.additionalSafetyMeasure && <p className="text-slate-600">추가 안전조치: {ext.additionalSafetyMeasure}</p>}
-            </div>
-          ))}
-          <button onClick={() => openSign("extensionApprove")} className="w-full py-2.5 rounded-xl bg-teal-600 text-white font-semibold text-sm hover:bg-teal-700 transition">
-            연장 승인 및 서명
-          </button>
-          {!showExtRejectInput ? (
-            <button onClick={() => setShowExtRejectInput(true)} className="w-full py-2 rounded-xl bg-red-100 text-red-700 font-semibold text-sm hover:bg-red-200 transition">
-              연장 반려
-            </button>
-          ) : (
-            <div className="space-y-2">
-              <textarea
-                value={extRejectReason}
-                onChange={(e) => setExtRejectReason(e.target.value)}
-                rows={2}
-                placeholder="연장 반려 사유"
-                className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none resize-none"
-              />
-              <div className="flex gap-2">
-                <button onClick={() => setShowExtRejectInput(false)} className="flex-1 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-sm">취소</button>
-                <button
-                  onClick={() => {
-                    if (!extRejectReason) return;
-                    rejectExtension(extRejectReason);
-                    setExtRejectReason("");
-                    setShowExtRejectInput(false);
-                    showToast("연장 반려 처리되었습니다.", "error");
-                  }}
-                  disabled={!extRejectReason}
-                  className="flex-1 py-1.5 rounded-lg bg-red-600 text-white text-sm font-semibold disabled:opacity-40"
-                >
-                  반려 확정
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      );
-    }
-    if (status === "CONTROL_ROOM_COMPLETION_SIGNED") {
-      return (
-        <div className="space-y-3">
-          <p className="text-sm text-slate-600">통제실 완료 확인이 완료되었습니다. 최종 확인 후 문서를 잠금하세요.</p>
-          <button
-            onClick={() => {
-              facilityManagerFinalComplete();
-              showToast("최종 완료 처리되었습니다. 문서가 잠금됩니다.", "success");
-            }}
-            className="w-full py-3 rounded-xl bg-purple-600 text-white font-bold text-sm hover:bg-purple-700 transition"
-          >
-            최종 완료 확인 및 잠금
-          </button>
-        </div>
-      );
-    }
-    if (status === "LOCKED") {
-      return <div className="p-3 rounded-xl bg-purple-50 border border-purple-200 text-sm text-purple-700">문서 잠금 완료. 모든 프로세스가 종료되었습니다.</div>;
-    }
-    return <div className="text-sm text-slate-400 p-3">현재 처리할 단계가 아닙니다.</div>;
-  }
-
-  return <div className="text-sm text-slate-400 p-3">역할을 선택해 주세요.</div>;
-}
-
-// ─── 타임라인 메인 ───────────────────────────────────────────────────────────
-
-function Timeline() {
-  const document = useApprovalStore((s) => s.document);
   if (!document) return null;
 
   const s = document.status;
+  const sigByCode = (code: string) => document.signatures.find((sig) => sig.stepCode === code);
 
-  const stepStatus = (doneStatuses: PermitStatus[], activeStatuses: PermitStatus[]): "done" | "active" | "pending" => {
+  function stepStatus(doneStatuses: PermitStatus[], activeStatuses: PermitStatus[]): "done" | "active" | "pending" {
     if (doneStatuses.includes(s)) return "done";
     if (activeStatuses.includes(s)) return "active";
     return "pending";
-  };
+  }
 
-  const sigByCode = (code: string) => document.signatures.find((sig) => sig.stepCode === code);
-
-  const AFTER_APPROVED: PermitStatus[] = ["APPROVED", "EXTENSION_REQUESTED", "EXTENSION_APPROVED", "EXTENSION_REJECTED", "CONTRACTOR_COMPLETION_SIGNED", "CONTROL_ROOM_COMPLETION_SIGNED", "LOCKED"];
-  const AFTER_TENANT: PermitStatus[] = ["FACILITY_STAFF_REVIEW", "SAFETY_SHE_REVIEW", "SAFETY_SHE_PARTIAL_SIGNED", "FACILITY_MANAGER_FINAL_REVIEW", ...AFTER_APPROVED, "REJECTED"];
-  const AFTER_CONTRACTOR_SIGNED: PermitStatus[] = ["CONTROL_ROOM_REVIEW", "TENANT_MANAGER_REVIEW", ...AFTER_TENANT];
+  const AFTER_APPROVED: PermitStatus[] = [
+    "APPROVED", "EXTENSION_REQUESTED", "EXTENSION_APPROVED", "EXTENSION_REJECTED",
+    "CONTRACTOR_COMPLETION_SIGNED", "CONTROL_ROOM_COMPLETION_SIGNED", "LOCKED",
+  ];
+  const AFTER_TENANT: PermitStatus[] = [
+    "FACILITY_STAFF_REVIEW", "SAFETY_SHE_REVIEW", "SAFETY_SHE_PARTIAL_SIGNED",
+    "FACILITY_MANAGER_FINAL_REVIEW", ...AFTER_APPROVED, "REJECTED",
+  ];
   const AFTER_SAFETY_SHE: PermitStatus[] = ["FACILITY_MANAGER_FINAL_REVIEW", ...AFTER_APPROVED, "REJECTED"];
 
   return (
     <div className="space-y-3">
-      {/* 1. 시공사 서명 */}
+
+      {/* Step 1: 시공사 안전관리자 서명 */}
       <StepCard
         stepNum={1}
         title="시공사 안전관리자 서명"
         person={`${document.contractorSafetyManagerName} / ${document.contractorCompany}`}
-        status={s === "READY_TO_SUBMIT" ? "active" : stepStatus(
-          ["CONTRACTOR_SIGNED", ...AFTER_CONTRACTOR_SIGNED],
-          []
-        )}
+        status={
+          s === "READY_TO_SUBMIT" || s === "REJECTED"
+            ? "active"
+            : stepStatus(["CONTRACTOR_SIGNED", "CONTROL_ROOM_REVIEW", ...AFTER_TENANT], [])
+        }
         signedAt={document.contractorSignedAt}
-        signature={sigByCode("CONTRACTOR_SIGN")}
-      />
+      >
+        {(s === "READY_TO_SUBMIT" || s === "REJECTED") && currentRole === "CONTRACTOR_SAFETY_MANAGER" && (
+          <InlineSignPrompt
+            message={s === "REJECTED" ? "수정 완료 후 아래 서명란에서 재서명해 주세요" : "아래 서명란에서 서명해 주세요"}
+          />
+        )}
+        {s === "REJECTED" && document.rejectionReason && (
+          <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 mt-2">
+            <p className="font-semibold mb-0.5">반려 사유</p>
+            <p>{document.rejectionReason}</p>
+          </div>
+        )}
+      </StepCard>
 
-      {/* 2. 통제실 확인 + 입주사 관리자 지정 */}
+      {/* Step 2: 통제실 확인 및 입주사 관리자 지정 */}
       <StepCard
         stepNum={2}
         title="통제실 확인 및 입주사 관리자 지정"
         person="박통제 / 통제실"
-        status={stepStatus(
-          AFTER_TENANT,
-          ["CONTRACTOR_SIGNED"]
-        )}
-        signedAt={document.tenantManager ? document.signatures.find((sig) => sig.stepCode === "TENANT_SIGN")?.signedAt : undefined}
+        status={stepStatus(AFTER_TENANT, ["CONTRACTOR_SIGNED"])}
       >
         {document.tenantManager && (
-          <p className="text-xs text-slate-500">지정: {document.tenantManager.name} ({document.tenantManager.company}, {document.tenantManager.floor})</p>
+          <p className="text-xs text-slate-500 mb-1">
+            지정 완료: {document.tenantManager.name} ({document.tenantManager.company}, {document.tenantManager.floor})
+          </p>
+        )}
+        {s === "CONTRACTOR_SIGNED" && currentRole === "CONTROL_ROOM" && (
+          <div className="mt-2 pt-3 border-t border-teal-200">
+            <p className="text-xs font-semibold text-slate-700 mb-2">입주사 관리자 지정</p>
+            <TenantAssignForm
+              onAssign={(person) => {
+                controlRoomAssignTenant(person);
+                showToast("입주사 관리자가 지정되었습니다.", "success");
+              }}
+            />
+          </div>
         )}
       </StepCard>
 
-      {/* 3. 입주사 관리자 서명 */}
+      {/* Step 3: 입주사 관리자 확인 서명 */}
       <StepCard
         stepNum={3}
         title="입주사 관리자 확인 서명"
@@ -1416,10 +1226,16 @@ function Timeline() {
           ["TENANT_MANAGER_REVIEW"]
         )}
         signedAt={sigByCode("TENANT_SIGN")?.signedAt}
-        signature={sigByCode("TENANT_SIGN")}
-      />
+      >
+        {document.tenantManager && (
+          <p className="text-xs text-slate-400">{document.tenantManager.floor} / {document.tenantManager.contact}</p>
+        )}
+        {s === "TENANT_MANAGER_REVIEW" && currentRole === "TENANT_MANAGER" && (
+          <InlineSignPrompt />
+        )}
+      </StepCard>
 
-      {/* 4. 관리소 직원 확인 + 안전/SHE 지정 */}
+      {/* Step 4: 관리소 직원 확인 및 안전/SHE 지정 */}
       <StepCard
         stepNum={4}
         title="관리소 직원 확인 및 안전/SHE 지정"
@@ -1429,11 +1245,31 @@ function Timeline() {
           ["FACILITY_STAFF_REVIEW"]
         )}
       >
-        {document.safetyOfficer && <p className="text-xs text-slate-500">안전: {document.safetyOfficer.name}</p>}
-        {document.sheManager && <p className="text-xs text-slate-500">SHE: {document.sheManager.name}</p>}
+        {(document.safetyOfficer || document.sheManager) && (
+          <div className="space-y-0.5">
+            {document.safetyOfficer && <p className="text-xs text-slate-500">안전: {document.safetyOfficer.name} ({document.safetyOfficer.department})</p>}
+            {document.sheManager && <p className="text-xs text-slate-500">SHE: {document.sheManager.name} ({document.sheManager.department})</p>}
+          </div>
+        )}
+        {s === "FACILITY_STAFF_REVIEW" && currentRole === "FACILITY_STAFF" && (
+          <div className="mt-2 pt-3 border-t border-teal-200">
+            <SafetySheForm
+              currentRole={currentRole}
+              document={document}
+              onConfirmStaff={(person) => {
+                facilityStaffConfirm(person);
+                showToast("실무 담당자로 확인되었습니다.", "info");
+              }}
+              onAssign={(safety, she) => {
+                assignSafetyAndShe(safety, she);
+                showToast("안전/SHE 담당자가 지정되었습니다.", "success");
+              }}
+            />
+          </div>
+        )}
       </StepCard>
 
-      {/* 5. 안전담당자 서명 */}
+      {/* Step 5: 안전담당자 서명 */}
       <StepCard
         stepNum={5}
         title="안전담당자 서명"
@@ -1446,10 +1282,18 @@ function Timeline() {
             : "pending"
         }
         signedAt={sigByCode("SAFETY_OFFICER_SIGN")?.signedAt}
-        signature={sigByCode("SAFETY_OFFICER_SIGN")}
-      />
+      >
+        {(s === "SAFETY_SHE_REVIEW" || s === "SAFETY_SHE_PARTIAL_SIGNED") &&
+          currentRole === "SAFETY_OFFICER" &&
+          !document.safetyOfficerSigned && (
+            <InlineSignPrompt />
+          )}
+        {document.safetyOfficerSigned && document.sheManagerSigned === false && (
+          <p className="text-xs text-amber-600 mt-1">서명 완료 — SHE 관리원 서명 대기중</p>
+        )}
+      </StepCard>
 
-      {/* 6. SHE 관리원 서명 */}
+      {/* Step 6: SHE 관리원 서명 */}
       <StepCard
         stepNum={6}
         title="SHE 관리원 서명"
@@ -1462,29 +1306,82 @@ function Timeline() {
             : "pending"
         }
         signedAt={sigByCode("SHE_MANAGER_SIGN")?.signedAt}
-        signature={sigByCode("SHE_MANAGER_SIGN")}
-      />
+      >
+        {(s === "SAFETY_SHE_REVIEW" || s === "SAFETY_SHE_PARTIAL_SIGNED") &&
+          currentRole === "SHE_MANAGER" &&
+          !document.sheManagerSigned && (
+            <InlineSignPrompt />
+          )}
+        {document.sheManagerSigned && document.safetyOfficerSigned === false && (
+          <p className="text-xs text-amber-600 mt-1">서명 완료 — 안전담당자 서명 대기중</p>
+        )}
+      </StepCard>
 
-      {/* 7. 관리소장 최종 승인 */}
+      {/* Step 7: 관리소장 최종 승인 */}
       <StepCard
         stepNum={7}
-        title="관리소장 최종 승인"
+        title={s === "REJECTED" ? "관리소장 반려 처리됨" : "관리소장 최종 승인"}
         person="오소장 / 관리소"
-        status={stepStatus(
-          [...AFTER_APPROVED, "REJECTED"],
-          ["FACILITY_MANAGER_FINAL_REVIEW"]
-        )}
+        status={stepStatus([...AFTER_APPROVED, "REJECTED"], ["FACILITY_MANAGER_FINAL_REVIEW"])}
         signedAt={sigByCode("FACILITY_MANAGER_APPROVE")?.signedAt}
-        signature={sigByCode("FACILITY_MANAGER_APPROVE")}
       >
+        {s === "FACILITY_MANAGER_FINAL_REVIEW" && currentRole === "FACILITY_MANAGER" && (
+          <div className="space-y-2 mt-1">
+            <InlineSignPrompt message="아래 서명란에서 최종 승인 서명해 주세요" />
+            <div className="pt-2 border-t border-teal-200">
+              {!showRejectInput ? (
+                <button
+                  onClick={() => setShowRejectInput(true)}
+                  className="px-3 py-1.5 text-xs rounded-lg bg-red-50 text-red-700 hover:bg-red-100 transition font-medium border border-red-200"
+                >
+                  반려 처리
+                </button>
+              ) : (
+                <div className="space-y-2">
+                  <textarea
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    rows={2}
+                    placeholder="반려 사유를 입력하세요"
+                    className="w-full border border-red-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-red-400 resize-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => { setShowRejectInput(false); setRejectReason(""); }}
+                      className="flex-1 py-1.5 rounded-lg bg-slate-100 text-slate-600 text-xs hover:bg-slate-200 transition"
+                    >
+                      취소
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!rejectReason) return;
+                        facilityManagerReject(rejectReason);
+                        setRejectReason("");
+                        setShowRejectInput(false);
+                        showToast("반려 처리되었습니다.", "error");
+                      }}
+                      disabled={!rejectReason}
+                      className="flex-1 py-1.5 rounded-lg bg-red-600 text-white text-xs font-semibold hover:bg-red-700 transition disabled:opacity-40"
+                    >
+                      반려 확정
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
         {s === "REJECTED" && document.rejectionReason && (
           <div className="p-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700 mt-1">
             반려 사유: {document.rejectionReason}
           </div>
         )}
+        {s === "APPROVED" && (
+          <p className="text-xs text-green-600 font-semibold mt-1">승인 완료</p>
+        )}
       </StepCard>
 
-      {/* 8. 연장 요청 (있을 때) */}
+      {/* 연장 요청 내역 */}
       {document.extensionRequests.length > 0 && (
         <div className="space-y-2">
           {document.extensionRequests.map((ext, i) => (
@@ -1499,6 +1396,7 @@ function Timeline() {
               <div className="text-xs text-slate-500 space-y-0.5 mt-1">
                 <p>요청 종료: {ext.requestedEndAt}</p>
                 <p>사유: {ext.reason}</p>
+                {ext.additionalSafetyMeasure && <p>추가 안전조치: {ext.additionalSafetyMeasure}</p>}
                 {ext.status === "REJECTED" && <p className="text-red-600">반려: {ext.rejectedReason}</p>}
                 {ext.status === "APPROVED" && <p className="text-green-600">승인 완료 ({ext.approvedBy})</p>}
               </div>
@@ -1507,29 +1405,108 @@ function Timeline() {
         </div>
       )}
 
-      {/* 9. 작업완료 확인 (시공사) */}
+      {/* 연장 요청 처리 (관리소장 인라인) */}
+      {s === "EXTENSION_REQUESTED" && currentRole === "FACILITY_MANAGER" && (
+        <div className="rounded-xl border-2 border-orange-300 bg-orange-50 p-3.5">
+          <p className="text-sm font-bold text-orange-800 mb-2">연장 요청 처리</p>
+          {document.extensionRequests.filter((e) => e.status === "PENDING").map((ext) => (
+            <div key={ext.id} className="p-2.5 rounded-lg bg-white border border-orange-200 text-xs mb-3 space-y-1">
+              <p className="font-semibold text-orange-700">요청 내용</p>
+              <p className="text-slate-600">요청 종료시각: {ext.requestedEndAt}</p>
+              <p className="text-slate-600">사유: {ext.reason}</p>
+              {ext.additionalSafetyMeasure && <p className="text-slate-600">추가 안전조치: {ext.additionalSafetyMeasure}</p>}
+            </div>
+          ))}
+          <div className="flex gap-2">
+            <button
+              onClick={() => onSign("extensionApprove")}
+              className="flex-1 py-2 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition"
+            >
+              연장 승인 및 서명
+            </button>
+            {!showExtRejectInput ? (
+              <button
+                onClick={() => setShowExtRejectInput(true)}
+                className="flex-1 py-2 rounded-lg bg-red-50 text-red-700 text-xs font-medium hover:bg-red-100 transition border border-red-200"
+              >
+                연장 반려
+              </button>
+            ) : (
+              <div className="flex-1 space-y-1">
+                <textarea
+                  value={extRejectReason}
+                  onChange={(e) => setExtRejectReason(e.target.value)}
+                  rows={2}
+                  placeholder="반려 사유"
+                  className="w-full border border-red-300 rounded-lg px-2 py-1 text-xs focus:outline-none resize-none"
+                />
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => { setShowExtRejectInput(false); setExtRejectReason(""); }}
+                    className="flex-1 py-1 rounded bg-slate-100 text-slate-600 text-xs"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (!extRejectReason) return;
+                      rejectExtension(extRejectReason);
+                      setExtRejectReason("");
+                      setShowExtRejectInput(false);
+                      showToast("연장 반려 처리되었습니다.", "error");
+                    }}
+                    disabled={!extRejectReason}
+                    className="flex-1 py-1 rounded bg-red-600 text-white text-xs font-semibold disabled:opacity-40"
+                  >
+                    반려 확정
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Step 9: 시공사 작업완료 확인 */}
       <StepCard
         stepNum={9}
         title="시공사 작업완료 확인"
         person={document.contractorSafetyManagerName}
         status={stepStatus(
           ["CONTRACTOR_COMPLETION_SIGNED", "CONTROL_ROOM_COMPLETION_SIGNED", "LOCKED"],
-          []
+          ["APPROVED", "EXTENSION_APPROVED", "EXTENSION_REQUESTED"]
         )}
         signedAt={document.completion?.contractorSignedAt}
       >
-        {document.completion && (
-          <div className="text-xs text-slate-500 space-y-0.5 mt-1">
-            <p>완료시각: {document.completion.actualCompletedAt}</p>
-            <p>현장정리: {document.completion.siteCleaned ? "완료" : "미완"} / 장비철수: {document.completion.equipmentRemoved ? "완료" : "미완"}</p>
+        {(s === "APPROVED" || s === "EXTENSION_APPROVED") && currentRole === "CONTRACTOR_SAFETY_MANAGER" && (
+          <div className="flex gap-2 mt-2">
+            <button
+              onClick={() => setShowExtensionModal(true)}
+              className="flex-1 py-2 rounded-lg bg-orange-100 text-orange-700 text-xs font-semibold hover:bg-orange-200 transition border border-orange-200"
+            >
+              연장 요청
+            </button>
+            <button
+              onClick={() => setShowCompletionModal(true)}
+              className="flex-1 py-2 rounded-lg bg-teal-600 text-white text-xs font-semibold hover:bg-teal-700 transition"
+            >
+              작업완료 확인
+            </button>
           </div>
         )}
-        {sigByCode("CONTRACTOR_COMPLETION_SIGN") && (
-          <img src={sigByCode("CONTRACTOR_COMPLETION_SIGN")?.signatureDataUrl} alt="서명" className="h-10 border rounded bg-white object-contain mt-1" />
+        {s === "EXTENSION_REQUESTED" && currentRole === "CONTRACTOR_SAFETY_MANAGER" && (
+          <p className="text-xs text-orange-600 mt-1">연장 승인 대기중입니다.</p>
+        )}
+        {document.completion && (
+          <div className="text-xs text-slate-500 space-y-0.5 mt-2 pt-2 border-t border-slate-200">
+            <p>완료시각: {document.completion.actualCompletedAt}</p>
+            <p>현장정리: {document.completion.siteCleaned ? "완료" : "미완"} / 장비철수: {document.completion.equipmentRemoved ? "완료" : "미완"}</p>
+            {document.completion.contractorComment && <p>의견: {document.completion.contractorComment}</p>}
+          </div>
         )}
       </StepCard>
 
-      {/* 10. 통제실 완료 확인 */}
+      {/* Step 10: 통제실 작업완료 확인 */}
       <StepCard
         stepNum={10}
         title="통제실 작업완료 확인"
@@ -1539,23 +1516,46 @@ function Timeline() {
           ["CONTRACTOR_COMPLETION_SIGNED"]
         )}
         signedAt={document.completion?.controlRoomSignedAt}
-        signature={sigByCode("CONTROL_ROOM_COMPLETION_SIGN")}
-      />
+      >
+        {s === "CONTRACTOR_COMPLETION_SIGNED" && currentRole === "CONTROL_ROOM" && (
+          <InlineSignPrompt />
+        )}
+      </StepCard>
 
-      {/* 11. 관리소장 최종 완료 확인 */}
+      {/* Step 11: 관리소장 최종 완료 확인 및 잠금 */}
       <StepCard
         stepNum={11}
         title="관리소장 최종 완료 확인 및 잠금"
         person="오소장 / 관리소"
-        status={stepStatus(
-          ["LOCKED"],
-          ["CONTROL_ROOM_COMPLETION_SIGNED"]
-        )}
+        status={stepStatus(["LOCKED"], ["CONTROL_ROOM_COMPLETION_SIGNED"])}
         signedAt={document.completion?.managerFinalConfirmedAt}
-      />
+      >
+        {s === "CONTROL_ROOM_COMPLETION_SIGNED" && currentRole === "FACILITY_MANAGER" && (
+          <button
+            onClick={() => {
+              facilityManagerFinalComplete();
+              showToast("최종 완료 처리되었습니다. 문서가 잠금됩니다.", "success");
+            }}
+            className="mt-2 w-full py-2.5 rounded-lg bg-purple-600 text-white text-sm font-bold hover:bg-purple-700 transition"
+          >
+            최종 완료 확인 및 잠금
+          </button>
+        )}
+        {s === "LOCKED" && (
+          <p className="text-xs text-purple-600 font-semibold mt-1">모든 프로세스가 완료되어 문서가 잠금되었습니다.</p>
+        )}
+      </StepCard>
 
-      {/* 알림 로그 */}
-      <NotificationPanel notifications={document.notifications} currentRole={document.status as unknown as UserRole} />
+      {/* 알림 패널 */}
+      <NotificationPanel notifications={document.notifications} currentRole={currentRole} />
+
+      {/* 서명란 — 하단 가로 배치 */}
+      <SignatureLane
+        doc={document}
+        currentRole={currentRole}
+        onSign={onSign}
+        onOpenCompletion={() => setShowCompletionModal(true)}
+      />
     </div>
   );
 }
@@ -1563,11 +1563,30 @@ function Timeline() {
 // ─── 메인 페이지 ─────────────────────────────────────────────────────────────
 
 export default function PermitApprovalPage() {
-  const { document, currentRole, setCurrentRole, initDocument, resetDocument } = useApprovalStore();
+  const {
+    document,
+    currentRole,
+    setCurrentRole,
+    initDocument,
+    resetDocument,
+    contractorSign,
+    tenantSign,
+    safetyOfficerSign,
+    sheManagerSign,
+    facilityManagerApprove,
+    controlRoomCompleteSign,
+    approveExtension,
+    resubmitAfterReject,
+    requestExtension,
+    contractorCompleteWork,
+  } = useApprovalStore();
+
   const [tab, setTab] = useState<"process" | "print">("process");
+  const [showSignPad, setShowSignPad] = useState<string | null>(null);
+  const [showExtensionModal, setShowExtensionModal] = useState(false);
+  const [showCompletionModal, setShowCompletionModal] = useState(false);
   const { showToast, ToastEl } = useToast();
 
-  // 문서 초기화
   useEffect(() => {
     initDocument();
   }, [initDocument]);
@@ -1580,20 +1599,86 @@ export default function PermitApprovalPage() {
     );
   }
 
+  const signActions: Record<string, (sig: string) => void> = {
+    contractor: contractorSign,
+    resubmit: resubmitAfterReject,
+    tenant: tenantSign,
+    safety: safetyOfficerSign,
+    she: sheManagerSign,
+    facilityApprove: facilityManagerApprove,
+    controlRoomComplete: controlRoomCompleteSign,
+    extensionApprove: approveExtension,
+  };
+
+  const signTitles: Record<string, string> = {
+    contractor: "시공사 안전관리자 서명",
+    resubmit: "재제출 서명",
+    tenant: "입주사 관리자 확인 서명",
+    safety: "안전담당자 확인 서명",
+    she: "SHE 관리원 확인 서명",
+    facilityApprove: "관리소장 최종 승인 서명",
+    controlRoomComplete: "통제실 완료확인 서명",
+    extensionApprove: "연장 승인 서명",
+  };
+
+  function onSignSave(sig: string) {
+    if (!showSignPad) return;
+    const action = signActions[showSignPad];
+    if (action) {
+      action(sig);
+      showToast("서명이 완료되었습니다.", "success");
+    }
+    setShowSignPad(null);
+  }
+
   const statusColor = STATUS_COLORS[document.status] ?? "bg-slate-100 text-slate-600";
   const statusLabel = STATUS_LABELS[document.status] ?? document.status;
 
   return (
-    <div className="flex flex-col h-screen bg-slate-50 overflow-hidden">
+    <div className="min-h-screen bg-slate-50">
       {ToastEl}
 
+      {/* 서명 모달 */}
+      {showSignPad && (
+        <SignaturePad
+          title={signTitles[showSignPad] ?? "서명"}
+          onSave={onSignSave}
+          onCancel={() => setShowSignPad(null)}
+        />
+      )}
+
+      {/* 연장 요청 모달 */}
+      {showExtensionModal && (
+        <ExtensionModal
+          originalEndAt={document.extendedWorkEndAt ?? document.workEndAt}
+          requestedBy={document.contractorSafetyManagerName}
+          onSubmit={(data) => {
+            requestExtension(data);
+            setShowExtensionModal(false);
+            showToast("연장 요청이 제출되었습니다.", "info");
+          }}
+          onCancel={() => setShowExtensionModal(false)}
+        />
+      )}
+
+      {/* 완료 확인 모달 */}
+      {showCompletionModal && (
+        <CompletionModal
+          onSubmit={(data) => {
+            contractorCompleteWork(data);
+            setShowCompletionModal(false);
+            showToast("작업완료 확인이 제출되었습니다.", "success");
+          }}
+          onCancel={() => setShowCompletionModal(false)}
+        />
+      )}
+
       {/* 헤더 */}
-      <header className="flex-shrink-0 bg-white border-b border-slate-200 px-4 py-3 print:hidden">
-        <div className="flex items-center gap-3 flex-wrap">
-          {/* 문서 정보 */}
+      <header className="sticky top-0 z-10 bg-white border-b border-slate-200 px-4 py-3 print:hidden">
+        <div className="max-w-2xl mx-auto flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xs font-mono text-slate-400 flex-shrink-0">{document.permitNo}</span>
-            <span className="text-sm font-semibold text-slate-800 truncate max-w-[180px] lg:max-w-xs">{document.title}</span>
+            <span className="text-sm font-semibold text-slate-800 truncate max-w-[160px] sm:max-w-xs">{document.title}</span>
             <span className={`px-2 py-0.5 text-xs rounded-full font-medium flex-shrink-0 ${statusColor}`}>
               {statusLabel}
             </span>
@@ -1603,7 +1688,6 @@ export default function PermitApprovalPage() {
           </div>
 
           <div className="flex items-center gap-2 ml-auto flex-wrap">
-            {/* 역할 전환 */}
             <select
               value={currentRole}
               onChange={(e) => setCurrentRole(e.target.value as UserRole)}
@@ -1614,7 +1698,6 @@ export default function PermitApprovalPage() {
               ))}
             </select>
 
-            {/* 데모 초기화 */}
             <button
               onClick={() => {
                 if (window.confirm("데모를 초기 상태로 초기화하시겠습니까?")) {
@@ -1627,7 +1710,6 @@ export default function PermitApprovalPage() {
               데모 초기화
             </button>
 
-            {/* 탭 */}
             <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
               {(["process", "print"] as const).map((t) => (
                 <button
@@ -1645,103 +1727,49 @@ export default function PermitApprovalPage() {
 
       {/* 바디 */}
       {tab === "print" ? (
-        <div className="flex-1 overflow-y-auto">
-          <PrintPreview />
-        </div>
+        <PrintPreview />
       ) : (
-        <div className="flex-1 overflow-hidden flex flex-col lg:flex-row min-h-0">
+        <div className="max-w-2xl mx-auto w-full px-4 py-4 pb-12">
 
-          {/* 좌측: 문서 요약 (PC only) */}
-          <aside className="hidden lg:flex flex-col w-60 flex-shrink-0 border-r border-slate-200 bg-white overflow-y-auto">
-            <div className="p-4 space-y-4">
-              <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">문서 요약</h2>
-
-              <div className="space-y-2.5 text-xs">
-                {[
-                  ["문서번호", document.permitNo],
-                  ["현장명", document.siteName],
-                  ["위치", document.location],
-                  ["작업유형", document.workType],
-                  ["시공사", document.contractorCompany],
-                  ["안전관리자", document.contractorSafetyManagerName],
-                  ["작업인원", `${document.workerCount}명`],
-                  ["시작", document.workStartAt],
-                  ["종료", document.extendedWorkEndAt ?? document.workEndAt],
-                ].map(([k, v]) => (
-                  <div key={k}>
-                    <p className="text-slate-400 font-medium">{k}</p>
-                    <p className="text-slate-700 font-semibold mt-0.5">{v}</p>
-                  </div>
+          {/* 문서 요약 카드 */}
+          <div className="bg-white rounded-xl border border-slate-200 p-4 mb-4">
+            <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 text-xs">
+              {[
+                ["현장명", document.siteName],
+                ["위치", document.location],
+                ["작업유형", document.workType],
+                ["시공사", document.contractorCompany],
+                ["안전관리자", document.contractorSafetyManagerName],
+                ["작업인원", `${document.workerCount}명`],
+                ["작업시작", document.workStartAt],
+                ["작업종료", document.extendedWorkEndAt ?? document.workEndAt],
+              ].map(([k, v]) => (
+                <div key={k} className="flex gap-1.5">
+                  <span className="text-slate-400 w-16 flex-shrink-0">{k}</span>
+                  <span className="font-medium text-slate-700 truncate">{v}</span>
+                </div>
+              ))}
+            </div>
+            {document.workDescription && (
+              <p className="text-xs text-slate-600 mt-2 pt-2 border-t border-slate-100 leading-relaxed">{document.workDescription}</p>
+            )}
+            {document.riskFactors.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2">
+                {document.riskFactors.map((r) => (
+                  <span key={r} className="px-1.5 py-0.5 bg-red-50 text-red-700 rounded text-[10px]">{r}</span>
                 ))}
               </div>
+            )}
+          </div>
 
-              <div>
-                <p className="text-slate-400 font-medium text-xs mb-1">작업내용</p>
-                <p className="text-xs text-slate-700 leading-relaxed">{document.workDescription}</p>
-              </div>
-
-              <div>
-                <p className="text-slate-400 font-medium text-xs mb-1.5">위험요인</p>
-                <div className="flex flex-wrap gap-1">
-                  {document.riskFactors.map((r) => <span key={r} className="px-1.5 py-0.5 bg-red-50 text-red-700 rounded text-[10px]">{r}</span>)}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-slate-400 font-medium text-xs mb-1.5">안전조치</p>
-                <div className="flex flex-wrap gap-1">
-                  {document.safetyMeasures.map((s) => <span key={s} className="px-1.5 py-0.5 bg-green-50 text-green-700 rounded text-[10px]">{s}</span>)}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-slate-400 font-medium text-xs mb-1.5">장비</p>
-                <div className="flex flex-wrap gap-1">
-                  {document.equipment.map((e) => <span key={e} className="px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded text-[10px]">{e}</span>)}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-slate-400 font-medium text-xs mb-0.5">비상연락처</p>
-                <p className="text-xs text-slate-700">{document.emergencyContact}</p>
-              </div>
-
-              {document.isLocked && (
-                <div className="p-2 rounded-lg bg-purple-50 border border-purple-200">
-                  <p className="text-[10px] font-bold text-purple-700">문서 잠금됨</p>
-                  {document.lockedAt && <p className="text-[10px] text-purple-500">{new Date(document.lockedAt).toLocaleString("ko-KR")}</p>}
-                </div>
-              )}
-            </div>
-          </aside>
-
-          {/* 중앙: 타임라인 */}
-          <main className="flex-1 overflow-y-auto p-4 min-w-0">
-            {/* 모바일 현재 상태 */}
-            <div className="lg:hidden mb-3 p-3 rounded-xl bg-white border border-slate-200">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs font-mono text-slate-400">{document.permitNo}</span>
-                <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${statusColor}`}>{statusLabel}</span>
-              </div>
-              <p className="text-sm font-semibold text-slate-800 mt-1 truncate">{document.title}</p>
-            </div>
-
-            <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3 hidden lg:block">승인 타임라인</h2>
-            <Timeline />
-          </main>
-
-          {/* 우측: 액션 패널 */}
-          <aside className="flex-shrink-0 lg:w-72 xl:w-80 border-t lg:border-t-0 lg:border-l border-slate-200 bg-white overflow-y-auto">
-            <div className="p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider">현재 액션</h2>
-                <span className="px-1.5 py-0.5 text-[10px] rounded-full bg-teal-100 text-teal-700 font-medium">
-                  {ROLE_LABELS[currentRole].split("(")[0].trim()}
-                </span>
-              </div>
-              <ActionPanel showToast={showToast} />
-            </div>
-          </aside>
+          {/* 프로세스 타임라인 */}
+          <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3">승인 프로세스</h2>
+          <Timeline
+            showToast={showToast}
+            onSign={(key) => setShowSignPad(key)}
+            setShowExtensionModal={setShowExtensionModal}
+            setShowCompletionModal={setShowCompletionModal}
+          />
         </div>
       )}
     </div>
