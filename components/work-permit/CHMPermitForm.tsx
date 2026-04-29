@@ -1289,11 +1289,8 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
             ] as { key: string; icon: string }[]).map(({ key, icon }) => {
               const on = get("aw_mainEquipType") === key;
               return (
-                <button key={key}
-                  onClick={() => {
-                    set("aw_mainEquipType", on ? "" : key);
-                    if (!on) set("aw_equipTypes", "[]");
-                  }}
+                <button type="button" key={key}
+                  onClick={() => set("aw_mainEquipType", on ? "" : key)}
                   className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-xl border-2 text-sm font-semibold transition-all"
                   style={{ borderColor: on ? "#d97706" : "#e2e8f0", background: on ? "#fffbeb" : "white", color: on ? "#d97706" : "#64748b" }}>
                   <span>{icon}</span>
@@ -1302,24 +1299,27 @@ function HeightWorkSubForm({ get, set }: { get: (k: string) => string; set: (k: 
               );
             })}
           </div>
-          {/* 고소작업대 종류 선택 */}
+          {/* 고소작업대 종류 선택 — 항상 펼쳐진 상태로 표시 */}
           {get("aw_mainEquipType") === "고소작업대" && (
             <div className="grid grid-cols-5 gap-x-4 gap-y-2 mb-4 px-3 py-3 rounded-xl bg-amber-50 border border-amber-100">
               <p className="col-span-5 text-xs font-bold text-amber-700 mb-0.5">고소작업대 종류</p>
               {["수직형", "굴절형", "직진붐형", "직진Z형", "궤도형"].map(t => {
-                const on = equipTypes.includes(t);
+                const checked = equipTypes.includes(t);
                 return (
-                  <label key={t} className="flex items-center gap-1.5 cursor-pointer select-none">
-                    <button onClick={() => {
-                      const next = on ? equipTypes.filter(x => x !== t) : [...equipTypes, t];
+                  <div key={t}
+                    role="checkbox"
+                    aria-checked={checked}
+                    onClick={() => {
+                      const next = checked ? equipTypes.filter(x => x !== t) : [...equipTypes, t];
                       set("aw_equipTypes", JSON.stringify(next));
                     }}
-                      className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
-                      style={{ borderColor: on ? "#d97706" : "#cbd5e1", background: on ? "#d97706" : "white" }}>
-                      {on && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
-                    </button>
+                    className="flex items-center gap-1.5 cursor-pointer select-none">
+                    <div className="w-4 h-4 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all"
+                      style={{ borderColor: checked ? "#d97706" : "#cbd5e1", background: checked ? "#d97706" : "white" }}>
+                      {checked && <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 12 12"><path d="M2 6l3 3 5-5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                    </div>
                     <span className="text-sm text-slate-700">{t}</span>
-                  </label>
+                  </div>
                 );
               })}
             </div>
