@@ -283,39 +283,35 @@ function CompletionModal({
 // ─── 입주사 관리자 지정 폼 ───────────────────────────────────────────────────
 
 function TenantAssignForm({ onAssign }: { onAssign: (p: Person) => void }) {
-  const [tab, setTab] = useState<"preset" | "manual">("preset");
   const [id, setId] = useState("");
-  const [name, setName] = useState(""); const [company, setCompany] = useState(""); const [floor, setFloor] = useState(""); const [contact, setContact] = useState("");
-
-  function assign() {
-    if (tab === "preset") { const p = TENANT_PRESETS.find(t => t.id === id); if (p) onAssign(p); }
-    else { if (!name) return; onAssign({ id: `t_${Date.now()}`, name, role: "TENANT_MANAGER", company, floor, contact }); }
-  }
+  const selected = TENANT_PRESETS.find(p => p.id === id) ?? null;
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
-        {(["preset", "manual"] as const).map(t => (
-          <button key={t} onClick={() => setTab(t)} className={`flex-1 py-1.5 text-xs rounded-md font-medium transition ${tab === t ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`}>{t === "preset" ? "목록 선택" : "직접 입력"}</button>
+      <div className="space-y-1.5">
+        {TENANT_PRESETS.map(p => (
+          <div
+            key={p.id}
+            onClick={() => setId(p.id)}
+            className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition ${id === p.id ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}
+          >
+            <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${id === p.id ? "border-teal-500 bg-teal-500" : "border-slate-300"}`}>
+              {id === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+              <p className="text-xs text-slate-500">{p.floor} / {p.company} / {p.contact}</p>
+            </div>
+          </div>
         ))}
       </div>
-      {tab === "preset" ? (
-        <div className="space-y-1.5">
-          {TENANT_PRESETS.map(p => (
-            <label key={p.id} className={`flex items-center gap-2 p-2.5 rounded-lg border cursor-pointer transition ${id === p.id ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}>
-              <input type="radio" name="tenant" checked={id === p.id} onChange={() => setId(p.id)} className="sr-only" />
-              <div><p className="text-sm font-semibold text-slate-800">{p.name}</p><p className="text-xs text-slate-500">{p.floor} / {p.company} / {p.contact}</p></div>
-            </label>
-          ))}
-        </div>
-      ) : (
-        <div className="space-y-2">
-          {[["이름 *", name, setName], ["회사명", company, setCompany], ["층", floor, setFloor], ["연락처", contact, setContact]].map(([lbl, val, fn]) => (
-            <input key={lbl as string} value={val as string} onChange={e => (fn as (v: string) => void)(e.target.value)} placeholder={lbl as string} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-teal-400" />
-          ))}
-        </div>
-      )}
-      <button onClick={assign} disabled={tab === "preset" ? !id : !name} className="w-full py-2.5 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-40">입주사 관리자 지정 및 서명요청 발송</button>
+      <button
+        onClick={() => { if (selected) onAssign(selected); }}
+        disabled={!selected}
+        className="w-full py-2.5 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-40"
+      >
+        입주사 관리자 지정 및 서명요청 발송
+      </button>
     </div>
   );
 }
@@ -329,24 +325,15 @@ function SafetySheForm({
   onConfirmStaff: (p: Person) => void;
   onAssign: (safety: Person, she: Person) => void;
 }) {
-  const [staffId, setStaffId] = useState(doc.facilityStaff?.id ?? "");
-  const [safetyId, setSafetyId] = useState(""); const [sheId, setSheId] = useState("");
-  const [safetyTab, setSafetyTab] = useState<"preset" | "manual">("preset");
-  const [sheTab, setSheTab] = useState<"preset" | "manual">("preset");
-  const [safetyM, setSafetyM] = useState({ name: "", department: "", contact: "" });
-  const [sheM, setSheM] = useState({ name: "", department: "", contact: "" });
-  const confirmed = !!doc.facilityStaff;
+  const [staffId, setStaffId] = useState("");
+  const [safetyId, setSafetyId] = useState("");
+  const [sheId, setSheId] = useState("");
 
-  const getSafety = (): Person | null => {
-    if (safetyTab === "preset") return SAFETY_OFFICER_PRESETS.find(p => p.id === safetyId) ?? null;
-    if (!safetyM.name) return null;
-    return { id: `so_${Date.now()}`, name: safetyM.name, role: "SAFETY_OFFICER", department: safetyM.department, contact: safetyM.contact };
-  };
-  const getShe = (): Person | null => {
-    if (sheTab === "preset") return SHE_MANAGER_PRESETS.find(p => p.id === sheId) ?? null;
-    if (!sheM.name) return null;
-    return { id: `she_${Date.now()}`, name: sheM.name, role: "SHE_MANAGER", department: sheM.department, contact: sheM.contact };
-  };
+  const confirmed = !!doc.facilityStaff;
+  const selectedStaff = FACILITY_STAFF_PRESETS.find(p => p.id === staffId) ?? null;
+  const selectedSafety = SAFETY_OFFICER_PRESETS.find(p => p.id === safetyId) ?? null;
+  const selectedShe = SHE_MANAGER_PRESETS.find(p => p.id === sheId) ?? null;
+  const canSubmit = confirmed && !!selectedSafety && !!selectedShe;
 
   return (
     <div className="space-y-4">
@@ -354,70 +341,90 @@ function SafetySheForm({
       <div>
         <p className="text-xs font-semibold text-slate-600 mb-1.5">실무 담당자 선택</p>
         {confirmed ? (
-          <div className="p-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">{doc.facilityStaff?.name} ({doc.facilityStaff?.department}) 확인됨</div>
+          <div className="p-2 rounded-lg bg-green-50 border border-green-200 text-sm text-green-700">
+            {doc.facilityStaff?.name} ({doc.facilityStaff?.department}) 확인됨
+          </div>
         ) : (
           <>
             <div className="space-y-1.5 mb-2">
               {FACILITY_STAFF_PRESETS.map(p => (
-                <label key={p.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${staffId === p.id ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}>
-                  <input type="radio" name="fstaff" checked={staffId === p.id} onChange={() => setStaffId(p.id)} className="sr-only" />
-                  <div><p className="text-sm font-semibold text-slate-800">{p.name}</p><p className="text-xs text-slate-500">{p.department} / {p.contact}</p></div>
-                </label>
+                <div
+                  key={p.id}
+                  onClick={() => setStaffId(p.id)}
+                  className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${staffId === p.id ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:bg-slate-50"}`}
+                >
+                  <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${staffId === p.id ? "border-teal-500 bg-teal-500" : "border-slate-300"}`}>
+                    {staffId === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                    <p className="text-xs text-slate-500">{p.department} / {p.contact}</p>
+                  </div>
+                </div>
               ))}
             </div>
-            <button onClick={() => { const p = FACILITY_STAFF_PRESETS.find(x => x.id === staffId); if (p) onConfirmStaff(p); }} disabled={!staffId} className="w-full py-2 rounded-lg bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-40">실무 담당자로 확인</button>
+            <button
+              onClick={() => { if (selectedStaff) onConfirmStaff(selectedStaff); }}
+              disabled={!selectedStaff}
+              className="w-full py-2 rounded-lg bg-slate-700 text-white text-sm font-semibold hover:bg-slate-800 transition disabled:opacity-40"
+            >
+              실무 담당자로 확인
+            </button>
           </>
         )}
       </div>
+
       {/* 안전담당자 */}
       <div>
         <p className="text-xs font-semibold text-slate-600 mb-1.5">안전담당자 지정</p>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-2">
-          {(["preset", "manual"] as const).map(t => <button key={t} onClick={() => setSafetyTab(t)} className={`flex-1 py-1 text-xs rounded-md font-medium ${safetyTab === t ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`}>{t === "preset" ? "목록" : "직접입력"}</button>)}
+        <div className="space-y-1.5">
+          {SAFETY_OFFICER_PRESETS.map(p => (
+            <div
+              key={p.id}
+              onClick={() => setSafetyId(p.id)}
+              className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${safetyId === p.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${safetyId === p.id ? "border-blue-500 bg-blue-500" : "border-slate-300"}`}>
+                {safetyId === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                <p className="text-xs text-slate-500">{p.department}</p>
+              </div>
+            </div>
+          ))}
         </div>
-        {safetyTab === "preset" ? (
-          <div className="space-y-1.5">
-            {SAFETY_OFFICER_PRESETS.map(p => (
-              <label key={p.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${safetyId === p.id ? "border-blue-500 bg-blue-50" : "border-slate-200 hover:bg-slate-50"}`}>
-                <input type="radio" name="safety" checked={safetyId === p.id} onChange={() => setSafetyId(p.id)} className="sr-only" />
-                <div><p className="text-sm font-semibold text-slate-800">{p.name}</p><p className="text-xs text-slate-500">{p.department}</p></div>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {["이름 *", "부서", "연락처"].map((lbl, i) => {
-              const keys = ["name", "department", "contact"] as const;
-              return <input key={lbl} value={safetyM[keys[i]]} onChange={e => setSafetyM(prev => ({ ...prev, [keys[i]]: e.target.value }))} placeholder={lbl} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-blue-400" />;
-            })}
-          </div>
-        )}
       </div>
+
       {/* SHE 관리원 */}
       <div>
         <p className="text-xs font-semibold text-slate-600 mb-1.5">SHE 관리원 지정</p>
-        <div className="flex gap-1 bg-slate-100 rounded-lg p-1 mb-2">
-          {(["preset", "manual"] as const).map(t => <button key={t} onClick={() => setSheTab(t)} className={`flex-1 py-1 text-xs rounded-md font-medium ${sheTab === t ? "bg-white text-slate-800 shadow-sm" : "text-slate-500"}`}>{t === "preset" ? "목록" : "직접입력"}</button>)}
+        <div className="space-y-1.5">
+          {SHE_MANAGER_PRESETS.map(p => (
+            <div
+              key={p.id}
+              onClick={() => setSheId(p.id)}
+              className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${sheId === p.id ? "border-purple-500 bg-purple-50" : "border-slate-200 hover:bg-slate-50"}`}
+            >
+              <div className={`w-4 h-4 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${sheId === p.id ? "border-purple-500 bg-purple-500" : "border-slate-300"}`}>
+                {sheId === p.id && <div className="w-1.5 h-1.5 rounded-full bg-white" />}
+              </div>
+              <div>
+                <p className="text-sm font-semibold text-slate-800">{p.name}</p>
+                <p className="text-xs text-slate-500">{p.department}</p>
+              </div>
+            </div>
+          ))}
         </div>
-        {sheTab === "preset" ? (
-          <div className="space-y-1.5">
-            {SHE_MANAGER_PRESETS.map(p => (
-              <label key={p.id} className={`flex items-center gap-2 p-2 rounded-lg border cursor-pointer transition ${sheId === p.id ? "border-purple-500 bg-purple-50" : "border-slate-200 hover:bg-slate-50"}`}>
-                <input type="radio" name="she" checked={sheId === p.id} onChange={() => setSheId(p.id)} className="sr-only" />
-                <div><p className="text-sm font-semibold text-slate-800">{p.name}</p><p className="text-xs text-slate-500">{p.department}</p></div>
-              </label>
-            ))}
-          </div>
-        ) : (
-          <div className="space-y-1.5">
-            {["이름 *", "부서", "연락처"].map((lbl, i) => {
-              const keys = ["name", "department", "contact"] as const;
-              return <input key={lbl} value={sheM[keys[i]]} onChange={e => setSheM(prev => ({ ...prev, [keys[i]]: e.target.value }))} placeholder={lbl} className="w-full border border-slate-200 rounded-lg px-3 py-1.5 text-sm outline-none focus:ring-2 focus:ring-purple-400" />;
-            })}
-          </div>
-        )}
       </div>
-      <button onClick={() => { const s = getSafety(); const sh = getShe(); if (s && sh) onAssign(s, sh); }} disabled={!confirmed || !getSafety() || !getShe()} className="w-full py-2.5 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-40">서명요청 발송</button>
+
+      <button
+        onClick={() => { if (selectedSafety && selectedShe) onAssign(selectedSafety, selectedShe); }}
+        disabled={!canSubmit}
+        className="w-full py-2.5 rounded-lg bg-teal-600 text-white text-sm font-semibold hover:bg-teal-700 transition disabled:opacity-40"
+      >
+        서명요청 발송
+      </button>
     </div>
   );
 }
